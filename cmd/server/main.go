@@ -18,6 +18,7 @@ import (
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/database"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/geo"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/osm"
+	"github.com/rxtech-lab/hk-transportation-mcp/internal/ratelimit"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/service"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/tools"
 )
@@ -41,18 +42,18 @@ func main() {
 	}
 	defer db.Close()
 
-	// Connect Redis cache (optional — continue without if unavailable)
+	// Connect Redis (required for rate limiting, optionally used for caching)
+	redisConn, err := cache.New(cfg.RedisURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	defer redisConn.Close()
+
 	var redisCache *cache.Cache
-	if !cfg.CacheEnabled {
-		log.Println("Cache disabled via CACHE_ENABLED=false")
+	if cfg.CacheEnabled {
+		redisCache = redisConn
 	} else {
-		redisCache, err = cache.New(cfg.RedisURL)
-		if err != nil {
-			log.Printf("Redis unavailable, running without cache: %v", err)
-			redisCache = nil
-		} else {
-			defer redisCache.Close()
-		}
+		log.Println("Cache disabled via CACHE_ENABLED=false")
 	}
 
 	// Create HTTP client and bus API clients
@@ -92,13 +93,12 @@ func main() {
 	// Create Streamable HTTP server
 	streamableServer := server.NewStreamableHTTPServer(mcpServer)
 
-	// Build the HTTP handler — optionally wrap with OAuth middleware
+	// Build the HTTP handler chain: streamableServer -> OAuth (optional) -> rate limit
 	var handler http.Handler = streamableServer
-	var authenticator *auth.OAuthAuthenticator
 
 	if cfg.OAuthServerURL != "" {
 		jwksEndpoint := cfg.OAuthServerURL + "/.well-known/jwks.json"
-		authenticator, err = auth.NewOAuthAuthenticator(auth.OAuthConfig{
+		authenticator, err := auth.NewOAuthAuthenticator(auth.OAuthConfig{
 			JWKSEndpoint: jwksEndpoint,
 			Issuer:       cfg.OAuthIssuer,
 			Audience:     cfg.OAuthAudience,
@@ -106,13 +106,17 @@ func main() {
 		if err != nil {
 			log.Printf("Warning: Failed to initialize OAuth: %v", err)
 		} else {
-			handler = authenticator.Middleware(streamableServer)
-			log.Printf("OAuth authentication enabled (JWKS: %s)", jwksEndpoint)
+			handler = authenticator.Middleware(handler)
+			log.Printf("OAuth enabled — authenticated users get higher rate limits (JWKS: %s)", jwksEndpoint)
 			defer authenticator.Close()
 		}
 	} else {
-		log.Println("OAuth not configured, running without authentication")
+		log.Println("OAuth not configured, all requests use default rate limit")
 	}
+
+	// Rate limiting (Redis-backed): 1 req/s unauthenticated, 10 req/s authenticated
+	rl := ratelimit.New(ratelimit.DefaultConfig(), redisConn.Client())
+	handler = rl.Middleware(handler)
 
 	// Setup HTTP mux
 	mux := http.NewServeMux()
@@ -121,6 +125,36 @@ func main() {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HK Transportation MCP Server</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+    .card { text-align: center; background: #fff; padding: 3rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+    p { color: #666; margin: 0 0 1.5rem; }
+    a { display: inline-block; padding: 0.75rem 2rem; background: #0070f3; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 500; }
+    a:hover { background: #005bb5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>HK Transportation MCP Server</h1>
+    <p>Real-time Hong Kong public transit data via MCP</p>
+    <a href="/mcp">Go to MCP Endpoint &rarr;</a>
+  </div>
+</body>
+</html>`))
 	})
 
 	// Handle graceful shutdown
