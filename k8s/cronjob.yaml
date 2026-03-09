@@ -4,7 +4,7 @@ metadata:
   name: hk-transportation-mcp-sync
   namespace: hk-transportation-mcp
 spec:
-  schedule: "0 3 * * *" # Daily at 3:00 AM UTC
+  schedule: "0 3 */3 * *" # Every 3 days at 3:00 AM UTC
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
