@@ -6,7 +6,7 @@ metadata:
   labels:
     app: hk-transportation-mcp
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: hk-transportation-mcp
