@@ -14,10 +14,14 @@ type Cache struct {
 }
 
 // New creates a new Cache backed by Redis.
+// addr can be a plain host:port or a redis:// / rediss:// URL.
 func New(addr string) (*Cache, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr: addr,
-	})
+	opts, err := redis.ParseURL(addr)
+	if err != nil {
+		// Fall back to plain address if URL parsing fails
+		opts = &redis.Options{Addr: addr}
+	}
+	client := redis.NewClient(opts)
 	if err := client.Ping(context.Background()).Err(); err != nil {
 		return nil, err
 	}
@@ -49,6 +53,11 @@ func SetJSON(ctx context.Context, c *Cache, key string, value any, ttl time.Dura
 		return err
 	}
 	return c.client.Set(ctx, key, data, ttl).Err()
+}
+
+// Client returns the underlying Redis client.
+func (c *Cache) Client() *redis.Client {
+	return c.client
 }
 
 // Close closes the underlying Redis client.

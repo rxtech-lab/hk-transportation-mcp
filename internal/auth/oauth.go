@@ -87,27 +87,26 @@ func (a *OAuthAuthenticator) ValidateToken(tokenString string) (jwt.MapClaims, e
 	return claims, nil
 }
 
-// Middleware returns an HTTP middleware that validates JWT bearer tokens.
-// Requests without an Authorization header are rejected with 401.
+// Middleware returns an HTTP middleware that optionally validates JWT bearer tokens.
+// If a valid token is present, claims are stored in context and X-Authenticated-Subject is set.
+// Requests without a token or with an invalid token are allowed through (unauthenticated).
 func (a *OAuthAuthenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") {
-			http.Error(w, `{"error":"missing bearer token"}`, http.StatusUnauthorized)
-			return
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+			claims, err := a.ValidateToken(tokenString)
+			if err != nil {
+				log.Printf("OAuth token validation failed: %v", err)
+			} else {
+				ctx := context.WithValue(r.Context(), claimsContextKey, claims)
+				r = r.WithContext(ctx)
+				if sub, _ := claims.GetSubject(); sub != "" {
+					r.Header.Set("X-Authenticated-Subject", sub)
+				}
+			}
 		}
-
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		claims, err := a.ValidateToken(tokenString)
-		if err != nil {
-			log.Printf("OAuth token validation failed: %v", err)
-			http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
-			return
-		}
-
-		// Store claims in request context
-		ctx := context.WithValue(r.Context(), claimsContextKey, claims)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r)
 	})
 }
 
