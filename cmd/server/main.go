@@ -134,7 +134,7 @@ func main() {
 			Search: searchService,
 		}
 		aiClient := chat.NewAIClient(cfg.AIGatewayURL, cfg.AIGatewayAPIKey, cfg.AIModel, toolExecutor)
-		waSender := whatsapp.NewSender(cfg.WasenderBaseURL, cfg.WasenderAPIKey)
+		waSender := whatsapp.NewSender(cfg.WasenderBaseURL, cfg.WasenderAPIKey, redisConn.Client())
 		waSender.Start()
 		defer waSender.Close()
 		waHandler := whatsapp.NewHandler(chatRepo, aiClient, waSender)

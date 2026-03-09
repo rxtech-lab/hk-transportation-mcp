@@ -9,7 +9,18 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 )
+
+func setupTestRedis(t *testing.T) *redis.Client {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { client.Close() })
+	return client
+}
 
 func TestDoSend_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -17,7 +28,7 @@ func TestDoSend_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSender(srv.URL, "test-key")
+	s := NewSender(srv.URL, "test-key", setupTestRedis(t))
 	err := s.doSend(context.Background(), "user@jid", "hello")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -41,7 +52,7 @@ func TestDoSend_RetryOn429(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSender(srv.URL, "test-key")
+	s := NewSender(srv.URL, "test-key", setupTestRedis(t))
 	start := time.Now()
 	err := s.doSend(context.Background(), "user@jid", "hello")
 	elapsed := time.Since(start)
@@ -69,7 +80,7 @@ func TestDoSend_MaxRetriesExceeded(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSender(srv.URL, "test-key")
+	s := NewSender(srv.URL, "test-key", setupTestRedis(t))
 	err := s.doSend(context.Background(), "user@jid", "hello")
 	if err == nil {
 		t.Fatal("expected error after max retries, got nil")
@@ -83,7 +94,7 @@ func TestDoSend_NonRetryableError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSender(srv.URL, "test-key")
+	s := NewSender(srv.URL, "test-key", setupTestRedis(t))
 	err := s.doSend(context.Background(), "user@jid", "hello")
 	if err == nil {
 		t.Fatal("expected error for 500, got nil")
@@ -101,7 +112,7 @@ func TestDoSend_ContextCancelledDuringRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSender(srv.URL, "test-key")
+	s := NewSender(srv.URL, "test-key", setupTestRedis(t))
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
@@ -125,7 +136,7 @@ func TestSendMessage_QueueOrder(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSender(srv.URL, "test-key")
+	s := NewSender(srv.URL, "test-key", setupTestRedis(t))
 	s.interval = 10 * time.Millisecond // short interval for testing
 	s.Start()
 	defer s.Close()
@@ -165,7 +176,7 @@ func TestSendMessage_IntervalEnforced(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSender(srv.URL, "test-key")
+	s := NewSender(srv.URL, "test-key", setupTestRedis(t))
 	s.interval = 100 * time.Millisecond // short interval for testing
 	s.Start()
 	defer s.Close()
@@ -199,9 +210,9 @@ func TestSendMessage_ContextCancelled(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSender(srv.URL, "test-key")
-	// Don't start the queue, so messages will block
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	s := NewSender(srv.URL, "test-key", setupTestRedis(t))
+	// Don't start the queue, so results never arrive
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 
 	err := s.SendMessage(ctx, "user@jid", "hello")
@@ -224,7 +235,7 @@ func TestDoSend_DefaultRetryAfter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSender(srv.URL, "test-key")
+	s := NewSender(srv.URL, "test-key", setupTestRedis(t))
 	err := s.doSend(context.Background(), "user@jid", "hello")
 	if err != nil {
 		t.Fatalf("expected success after retry, got %v", err)
