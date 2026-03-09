@@ -6,7 +6,6 @@ namespace: hk-transportation-mcp
 resources:
   - deployment.yaml
   - cronjob.yaml
-  - secrets.yaml
   - ingress.yaml
   - issuer.yaml
   - config.yaml
