@@ -4,14 +4,20 @@ metadata:
   name: hk-transportation-mcp-ingress
   namespace: hk-transportation-mcp
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
+  ingressClassName: nginx
   tls:
     - hosts:
-        - hk-transportation-mcp.example.com
+        - hk.transport.mcprouter.app
       secretName: hk-transportation-mcp-tls
   rules:
-    - host: hk-transportation-mcp.example.com
+    - host: hk.transport.mcprouter.app
       http:
         paths:
           - path: /

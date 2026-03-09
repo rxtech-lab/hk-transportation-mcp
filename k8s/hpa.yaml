@@ -9,7 +9,7 @@ spec:
     kind: Deployment
     name: hk-transportation-mcp
   minReplicas: 1
-  maxReplicas: 2
+  maxReplicas: 1
   metrics:
     - type: Resource
       resource:
