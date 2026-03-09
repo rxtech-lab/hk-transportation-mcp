@@ -122,9 +122,7 @@ func (s *Sender) processQueue() {
 
 			err := s.doSend(msg.ctx, msg.jid, msg.text)
 			msg.result <- err
-			if err == nil {
-				lastSent = time.Now()
-			}
+			lastSent = time.Now()
 
 		case <-s.done:
 			return
