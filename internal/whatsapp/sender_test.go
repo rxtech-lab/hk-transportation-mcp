@@ -211,7 +211,8 @@ func TestSendMessage_ContextCancelled(t *testing.T) {
 	defer srv.Close()
 
 	s := NewSender(srv.URL, "test-key", setupTestRedis(t))
-	// Don't start the queue, so results never arrive
+	// Don't start the queue, so results never arrive.
+	// Use 1.5s timeout because Redis BLPOP has a minimum timeout of 1 second.
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 

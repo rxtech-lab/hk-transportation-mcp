@@ -191,7 +191,7 @@ func (s *Sender) processQueue() {
 		// Enforce minimum interval between sends using distributed Redis gate
 		s.waitForSlot()
 
-		// Send the message
+		// Send the message (use background context to finish current send during shutdown)
 		sendErr := s.doSend(context.Background(), msg.JID, msg.Text)
 
 		// Publish result back to the caller
@@ -199,7 +199,11 @@ func (s *Sender) processQueue() {
 		if sendErr != nil {
 			res.Error = sendErr.Error()
 		}
-		resData, _ := json.Marshal(res)
+		resData, err := json.Marshal(res)
+		if err != nil {
+			log.Printf("whatsapp: marshal result for %s: %v", msg.ID, err)
+			continue
+		}
 		resultKey := redisResultPrefix + msg.ID
 
 		pipe := s.redis.Pipeline()
