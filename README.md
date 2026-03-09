@@ -1,145 +1,142 @@
-# hk-transportation-mcp
+# HK Transportation MCP
 
-Go server built with Fiber, GORM, and Wire.
+Realtime Hong Kong Transportation Info for AI Agents — an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that provides real-time bus arrival data, route planning, and location search across Hong Kong's public transit network.
+
+Built with Go, [mcp-go](https://github.com/mark3labs/mcp-go), PostgreSQL + PostGIS, and data from KMB and Citybus APIs.
+
+## Features
+
+- **Real-time bus arrivals** — live ETA data from KMB and Citybus
+- **Nearby stop discovery** — find bus stops within walking distance using PostGIS spatial queries
+- **Route planning** — find direct bus routes between an origin and destination
+- **Location search** — geocode Hong Kong addresses/landmarks via Nominatim, then find nearby stops
+- **Streamable HTTP transport** — serves over HTTP at `/mcp` for easy integration
+- **Optional OAuth** — JWT-based authentication via configurable OIDC provider
+- **Optional Redis caching** — reduce API calls with configurable caching layer
+
+## MCP Tools
+
+| Tool              | Description                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `nearby_arrivals` | Find bus stops near a latitude/longitude and get real-time arrival times for all routes serving those stops.      |
+| `route_arrivals`  | Find direct bus routes connecting an origin to a destination and get real-time arrival times at the origin stops. |
+| `search_location` | Search for a location in Hong Kong by name, geocode it, and find nearby bus stops.                                |
 
 ## Getting Started
 
 ### Prerequisites
 
-- Go 1.24 or higher
-- PostgreSQL database
-- Docker (optional, for running postgres via docker-compose)
+- Go 1.24+
+- PostgreSQL with PostGIS extension
+- Redis (optional, for caching)
+- Docker (optional)
 
-### Environment Setup
+### Quick Start
 
-1. Copy the example environment file:
+1. Clone and configure:
+
 ```bash
 cp .env.example .env
+# Edit .env with your database URL
 ```
 
-2. Update the `.env` file with your configuration:
-```env
-DATABASE_URL=postgres://user:password@localhost:5432/dbname?sslmode=disable
-PORT=8080
-```
+2. Start dependencies with Docker:
 
-### Installation
-
-1. Install dependencies:
 ```bash
-make install
+docker compose up -d
 ```
 
-2. Generate code:
+3. Sync bus stop data into the database:
+
 ```bash
-make generate
+go run ./cmd/sync
 ```
 
-### Running the Server
+4. Start the MCP server:
 
-#### Using Docker Compose (Recommended)
-
-Start the database and server:
 ```bash
-docker compose up
+go run ./cmd/server
 ```
 
-#### Local Development
+The server will be available at `http://localhost:8080/mcp`.
 
-1. Start PostgreSQL (if not using Docker)
+### Environment Variables
 
-2. Run the server:
-```bash
-make run
+| Variable           | Description                                   | Default          |
+| ------------------ | --------------------------------------------- | ---------------- |
+| `DATABASE_URL`     | PostgreSQL connection string                  | _(required)_     |
+| `REDIS_URL`        | Redis connection string                       | `localhost:6379` |
+| `PORT`             | HTTP server port                              | `8080`           |
+| `CACHE_ENABLED`    | Enable/disable Redis caching                  | `true`           |
+| `OAUTH_SERVER_URL` | OIDC server URL (leave empty to disable auth) | _(empty)_        |
+| `OAUTH_ISSUER`     | Expected JWT issuer                           | _(empty)_        |
+| `OAUTH_AUDIENCE`   | Expected JWT audience                         | _(empty)_        |
+
+### Using with Claude Desktop
+
+Add this to your Claude Desktop MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "hk-transportation": {
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
 ```
 
-The server will start on `http://localhost:8080` (or the port specified in your `.env` file).
+## Development
 
-### Building
+### Build
 
-Build the server binary:
 ```bash
 make build
 ```
 
-The binary will be created in `bin/server`.
+### Test
 
-### Testing
-
-Run tests:
 ```bash
 make test
 ```
-
-### API Documentation
-
-The API is documented using OpenAPI 3.0. View the specification at:
-- File: `api/openapi.yaml`
-- Swagger UI: `http://localhost:8080/swagger` (when server is running)
-
-### Available Endpoints
-
-- `GET /health` - Health check endpoint
-- `GET /api/v1/examples` - List all examples
-- `POST /api/v1/examples` - Create a new example
-- `GET /api/v1/examples/{id}` - Get an example by ID
 
 ### Project Structure
 
 ```
 .
-├── api/                  # OpenAPI specifications
-├── cmd/                  # Application entry points
-│   └── server/          # Main server application
-├── internal/            # Private application code
-│   ├── api/            # Generated API code
-│   ├── config/         # Configuration management
-│   ├── database/       # Database connections and migrations
-│   ├── dto/            # Data transfer objects
-│   ├── models/         # Database models
-│   ├── server/         # HTTP server implementation
-│   ├── service/        # Business logic
-│   ├── testutil/       # Testing utilities
-│   └── utils/          # Utility functions
-├── k8s/                 # Kubernetes manifests
-└── tools/               # Build tools and generators
+├── cmd/
+│   ├── server/          # MCP server entry point
+│   └── sync/            # Data sync CLI (fetches stops from bus APIs)
+├── internal/
+│   ├── auth/            # OAuth/JWT authentication middleware
+│   ├── busapi/          # KMB and Citybus API clients
+│   ├── cache/           # Redis caching layer
+│   ├── config/          # Environment-based configuration
+│   ├── database/        # PostgreSQL connection and migrations
+│   ├── geo/             # PostGIS-backed spatial index for stop lookup
+│   ├── models/          # Database models
+│   ├── osm/             # Nominatim geocoding & Overpass POI search
+│   ├── service/         # Business logic (nearby, route, search)
+│   ├── sync/            # Bus stop data synchronization
+│   └── tools/           # MCP tool registration and handlers
+├── k8s/                 # Kubernetes deployment manifests
+└── docker-compose.yaml
 ```
-
-### Development
-
-#### Adding a New Endpoint
-
-1. Update the OpenAPI specification in `api/openapi.yaml`
-2. Run `make generate` to regenerate the API code
-3. Implement the endpoint in `internal/server/server.go`
-4. Add business logic in `internal/service/`
-
-#### Database Migrations
-
-Migrations are automatically run on server startup using GORM AutoMigrate.
-Add new models in `internal/models/` and update the `Migrate` function in `internal/database/database.go`.
 
 ## Deployment
 
-
-### Kubernetes
-
-Deploy to Kubernetes:
-```bash
-make deploy
-```
-
-This will apply the manifests in the `k8s/` directory.
-
-
 ### Docker
 
-Build and tag the Docker image:
 ```bash
 make docker
 ```
 
+### Kubernetes
+
+```bash
+make deploy
+```
+
 ## License
 
-Add your license information here.
-
+MIT
