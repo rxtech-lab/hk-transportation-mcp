@@ -1,5 +1,7 @@
 # HK Transportation MCP
 
+![image](./images/HKTransportation.webp)
+
 Realtime Hong Kong Transportation Info for AI Agents — an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that provides real-time bus arrival data, route planning, and location search across Hong Kong's public transit network.
 
 Built with Go, [mcp-go](https://github.com/mark3labs/mcp-go), PostgreSQL + PostGIS, and data from KMB and Citybus APIs.
