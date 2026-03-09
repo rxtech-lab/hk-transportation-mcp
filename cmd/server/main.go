@@ -135,6 +135,8 @@ func main() {
 		}
 		aiClient := chat.NewAIClient(cfg.AIGatewayURL, cfg.AIGatewayAPIKey, cfg.AIModel, toolExecutor)
 		waSender := whatsapp.NewSender(cfg.WasenderBaseURL, cfg.WasenderAPIKey)
+		waSender.Start()
+		defer waSender.Close()
 		waHandler := whatsapp.NewHandler(chatRepo, aiClient, waSender)
 		mux.Handle("/webhook/whatsapp", waHandler)
 		log.Println("WhatsApp chatbot enabled")
