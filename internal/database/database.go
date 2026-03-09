@@ -60,6 +60,14 @@ func migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_route_stops_stop ON route_stops(stop_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_bus_stops_geom ON bus_stops USING GIST(geom)`,
+		`CREATE TABLE IF NOT EXISTS chat_messages (
+			id SERIAL PRIMARY KEY,
+			jid TEXT NOT NULL,
+			role TEXT NOT NULL,
+			content TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_messages_jid ON chat_messages(jid, created_at DESC)`,
 	}
 
 	for _, stmt := range statements {

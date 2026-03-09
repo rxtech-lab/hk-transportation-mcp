@@ -13,6 +13,15 @@ type Config struct {
 	OAuthIssuer    string
 	OAuthAudience  string
 	CacheEnabled   bool
+
+	// WhatsApp (WaSenderAPI)
+	WasenderAPIKey  string
+	WasenderBaseURL string
+
+	// AI Gateway (Vercel)
+	AIGatewayURL    string
+	AIGatewayAPIKey string
+	AIModel         string
 }
 
 // Load loads configuration from environment variables
@@ -27,6 +36,13 @@ func Load() (*Config, error) {
 		OAuthIssuer:    getEnv("OAUTH_ISSUER", ""),
 		OAuthAudience:  getEnv("OAUTH_AUDIENCE", ""),
 		CacheEnabled:   cacheEnabled == "true" || cacheEnabled == "1",
+
+		WasenderAPIKey:  getEnv("WASENDER_API_KEY", ""),
+		WasenderBaseURL: getEnv("WASENDER_BASE_URL", "https://api.wasenderapi.com"),
+
+		AIGatewayURL:    getEnv("AI_GATEWAY_URL", "https://ai-gateway.vercel.sh/v1"),
+		AIGatewayAPIKey: getEnv("AI_GATEWAY_API_KEY", ""),
+		AIModel:         getEnv("AI_MODEL", "anthropic/claude-sonnet-4.6"),
 	}
 
 	return cfg, nil

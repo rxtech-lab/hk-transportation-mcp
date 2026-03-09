@@ -14,6 +14,7 @@ import (
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/auth"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/busapi"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/cache"
+	"github.com/rxtech-lab/hk-transportation-mcp/internal/chat"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/config"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/database"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/geo"
@@ -21,6 +22,7 @@ import (
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/ratelimit"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/service"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/tools"
+	"github.com/rxtech-lab/hk-transportation-mcp/internal/whatsapp"
 )
 
 func main() {
@@ -122,6 +124,21 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", handler)
 	mux.Handle("/mcp/", handler)
+
+	// WhatsApp chatbot (optional — only enabled when WASENDER_API_KEY is set)
+	if cfg.WasenderAPIKey != "" && cfg.AIGatewayAPIKey != "" {
+		chatRepo := chat.NewRepository(db, 20)
+		toolExecutor := &chat.ToolExecutor{
+			Nearby: nearbyService,
+			Route:  routeService,
+			Search: searchService,
+		}
+		aiClient := chat.NewAIClient(cfg.AIGatewayURL, cfg.AIGatewayAPIKey, cfg.AIModel, toolExecutor)
+		waSender := whatsapp.NewSender(cfg.WasenderBaseURL, cfg.WasenderAPIKey)
+		waHandler := whatsapp.NewHandler(chatRepo, aiClient, waSender)
+		mux.Handle("/webhook/whatsapp", waHandler)
+		log.Println("WhatsApp chatbot enabled")
+	}
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
