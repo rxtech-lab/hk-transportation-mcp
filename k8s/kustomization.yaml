@@ -7,6 +7,5 @@ resources:
   - deployment.yaml
   - cronjob.yaml
   - ingress.yaml
-  - issuer.yaml
   - config.yaml
   - hpa.yaml
