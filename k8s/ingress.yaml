@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hk-transportation-mcp-ingress
+  namespace: hk-transportation-mcp
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+    - hosts:
+        - hk-transportation-mcp.example.com
+      secretName: hk-transportation-mcp-tls
+  rules:
+    - host: hk-transportation-mcp.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hk-transportation-mcp
+                port:
+                  number: 8080

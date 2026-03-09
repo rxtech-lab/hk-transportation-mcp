@@ -1,0 +1,47 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+main
+
+# Test binary
+*.test
+
+# Output of go coverage tool
+*.out
+coverage.*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Generated files
+internal/api/gen.go
+**/wire_gen.go
+
+# Debug
+__debug*
+
+# Temporary files
+tmp/
+temp/
+sync
+server
+*.db
+secrets.yaml

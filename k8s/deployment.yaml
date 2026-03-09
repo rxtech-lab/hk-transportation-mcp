@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hk-transportation-mcp
+  namespace: hk-transportation-mcp
+  labels:
+    app: hk-transportation-mcp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hk-transportation-mcp
+  template:
+    metadata:
+      labels:
+        app: hk-transportation-mcp
+    spec:
+      volumes:
+        - name: config
+          configMap:
+            name: hk-transportation-mcp-config
+      containers:
+        - name: hk-transportation-mcp
+          image: hk-transportation-mcp:latest
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+            requests:
+              memory: "128Mi"
+              cpu: "250m"
+          envFrom:
+            - secretRef:
+                name: hk-transportation-mcp-secret
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hk-transportation-mcp
+  namespace: hk-transportation-mcp
+  labels:
+    app: hk-transportation-mcp
+spec:
+  selector:
+    app: hk-transportation-mcp
+  ports:
+    - name: api
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP

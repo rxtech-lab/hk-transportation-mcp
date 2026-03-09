@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hk-transportation-mcp-sync
+  namespace: hk-transportation-mcp
+spec:
+  schedule: "0 3 * * *" # Daily at 3:00 AM UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 1800 # 30 min timeout
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: hk-transportation-mcp-sync
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: sync
+              image: hk-transportation-mcp-sync:latest
+              resources:
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+                requests:
+                  memory: "256Mi"
+                  cpu: "250m"
+              envFrom:
+                - secretRef:
+                    name: hk-transportation-mcp-secret
+                - configMapRef:
+                    name: hk-transportation-mcp-config

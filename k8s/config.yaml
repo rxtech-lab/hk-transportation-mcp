@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hk-transportation-mcp-config
+  namespace: hk-transportation-mcp
+data:
+  PORT: "8080"
+  CACHE_ENABLED: "true"
