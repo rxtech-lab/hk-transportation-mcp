@@ -9,3 +9,4 @@ data:
   WASENDER_BASE_URL: "https://api.wasenderapi.com"
   AI_GATEWAY_URL: "https://ai-gateway.vercel.sh/v1"
   AI_MODEL: "anthropic/claude-sonnet-4.6"
+  REDIS_URL: "redis://redis:6379"
