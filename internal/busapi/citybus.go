@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -68,9 +69,36 @@ type citybusETA struct {
 }
 
 func (c *CitybusClient) FetchAllStops(ctx context.Context) ([]models.BusStop, error) {
-	// Citybus doesn't have a bulk stop endpoint; we collect stops from route-stops.
-	// For now, return empty — stops will be populated via route-stop sync.
-	return nil, nil
+	// Citybus has no bulk stop endpoint, so we collect unique stop IDs from all
+	// route-stops and fetch each stop individually.
+	routes, err := c.FetchAllRoutes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch routes for stops: %w", err)
+	}
+
+	stopIDSet := make(map[string]struct{})
+	for _, r := range routes {
+		rs, err := c.FetchRouteStops(ctx, r.Route, r.Bound, r.ServiceType)
+		if err != nil {
+			continue
+		}
+		for _, s := range rs {
+			stopIDSet[s.StopID] = struct{}{}
+		}
+	}
+
+	log.Printf("CTB: fetching %d individual stops...", len(stopIDSet))
+	var stops []models.BusStop
+	for sid := range stopIDSet {
+		log.Printf("CTB: fetching stop %s...", sid)
+		stop, err := c.FetchStopByID(ctx, sid)
+		if err != nil {
+			continue
+		}
+		stops = append(stops, *stop)
+	}
+	log.Printf("CTB: fetched %d stops", len(stops))
+	return stops, nil
 }
 
 func (c *CitybusClient) FetchAllRoutes(ctx context.Context) ([]models.Route, error) {
@@ -98,6 +126,7 @@ func (c *CitybusClient) FetchAllRoutes(ctx context.Context) ([]models.Route, err
 }
 
 func (c *CitybusClient) FetchRouteStops(ctx context.Context, route, bound, serviceType string) ([]models.RouteStop, error) {
+	log.Printf("CTB: fetching route-stops for route %s bound %s...", route, bound)
 	dir := citybusDirection(bound)
 	url := fmt.Sprintf("%s/route-stop/ctb/%s/%s", citybusBaseURL, route, dir)
 	var resp citybusResponse[[]citybusRouteStop]
@@ -108,7 +137,7 @@ func (c *CitybusClient) FetchRouteStops(ctx context.Context, route, bound, servi
 	stops := make([]models.RouteStop, 0, len(resp.Data))
 	for _, rs := range resp.Data {
 		stops = append(stops, models.RouteStop{
-			RouteID:  fmt.Sprintf("CTB-%s-%s", rs.Route, rs.Dir),
+			RouteID:  fmt.Sprintf("CTB-%s-%s", rs.Route, bound),
 			StopID:   rs.Stop,
 			StopSeq:  rs.Seq,
 			Operator: opCitybus,
