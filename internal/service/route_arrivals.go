@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log"
 	"sort"
 	"sync"
 
@@ -30,6 +31,7 @@ func NewRouteArrivalsService(index *geo.StopIndex, clients []busapi.BusAPIClient
 // RouteArrivalsResult is the result for the route_arrivals tool.
 type RouteArrivalsResult struct {
 	CandidateRoutes []CandidateRoute `json:"candidate_routes"`
+	TransferRoutes  []TransferRoute  `json:"transfer_routes"`
 }
 
 // CandidateRoute represents a route that connects origin to destination.
@@ -44,18 +46,37 @@ type CandidateRoute struct {
 	Arrivals     []models.ETAArrival `json:"arrivals"`
 }
 
+// TransferRoute represents a route requiring one transfer between two buses.
+type TransferRoute struct {
+	FirstRouteID     string              `json:"first_route_id"`
+	FirstRouteName   string              `json:"first_route_name"`
+	SecondRouteID    string              `json:"second_route_id"`
+	SecondRouteName  string              `json:"second_route_name"`
+	OriginStop       models.BusStop      `json:"origin_stop"`
+	TransferStop     models.BusStop      `json:"transfer_stop"`
+	DestStop         models.BusStop      `json:"dest_stop"`
+	FirstLegArrivals []models.ETAArrival `json:"first_leg_arrivals"`
+}
+
 // Execute finds routes connecting origin area to destination area and fetches ETAs.
 func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, destLon, radiusOrigin, radiusDest float64) (*RouteArrivalsResult, error) {
 	originStops := s.index.FindNearby(lat, lon, radiusOrigin)
 	destStops := s.index.FindNearby(destLat, destLon, radiusDest)
 
-	if len(originStops) == 0 {
-		return &RouteArrivalsResult{CandidateRoutes: []CandidateRoute{}}, nil
-	}
-	if len(destStops) == 0 {
-		return &RouteArrivalsResult{CandidateRoutes: []CandidateRoute{}}, nil
+	if len(originStops) == 0 || len(destStops) == 0 {
+		return &RouteArrivalsResult{
+			CandidateRoutes: []CandidateRoute{},
+			TransferRoutes:  []TransferRoute{},
+		}, nil
 	}
 
+	nearbyService := &NearbyArrivalsService{
+		index:   s.index,
+		clients: s.clients,
+		cache:   s.cache,
+	}
+
+	// --- Direct routes (in-memory) ---
 	// Build set of routes serving destination stops
 	destRoutes := make(map[string]map[string]int) // routeID → stopID → seq
 	for _, stop := range destStops {
@@ -122,10 +143,6 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 		}
 	}
 
-	if len(candidates) == 0 {
-		return &RouteArrivalsResult{CandidateRoutes: []CandidateRoute{}}, nil
-	}
-
 	// Deduplicate by routeID (keep shortest path)
 	sort.Slice(candidates, func(i, j int) bool {
 		return (candidates[i].destSeq - candidates[i].originSeq) < (candidates[j].destSeq - candidates[j].originSeq)
@@ -139,18 +156,12 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 		}
 	}
 
-	// Fetch ETAs concurrently
+	// Fetch ETAs concurrently for direct routes
 	var (
 		mu      sync.Mutex
 		results []CandidateRoute
 		wg      sync.WaitGroup
 	)
-
-	nearbyService := &NearbyArrivalsService{
-		index:   s.index,
-		clients: s.clients,
-		cache:   s.cache,
-	}
 
 	for _, c := range uniqueCandidates {
 		wg.Add(1)
@@ -175,5 +186,61 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 
 	wg.Wait()
 
-	return &RouteArrivalsResult{CandidateRoutes: results}, nil
+	// --- Transfer routes (SQL) ---
+	originStopIDs := make([]string, len(originStops))
+	for i, s := range originStops {
+		originStopIDs[i] = s.StopID
+	}
+	destStopIDs := make([]string, len(destStops))
+	for i, s := range destStops {
+		destStopIDs[i] = s.StopID
+	}
+
+	var transferRoutes []TransferRoute
+
+	transfers, err := s.index.FindTransferRoutes(originStopIDs, destStopIDs, 10)
+	if err != nil {
+		log.Printf("transfer route search failed: %v", err)
+	}
+
+	for _, t := range transfers {
+		originStop, ok := s.index.GetStop(t.OriginStopID)
+		if !ok {
+			continue
+		}
+		transferStop, ok := s.index.GetStop(t.TransferStopID)
+		if !ok {
+			continue
+		}
+		destStop, ok := s.index.GetStop(t.DestStopID)
+		if !ok {
+			continue
+		}
+
+		firstRouteName := extractRouteName(t.FirstRouteID)
+		etas := nearbyService.fetchETACached(ctx, originStop, firstRouteName)
+
+		transferRoutes = append(transferRoutes, TransferRoute{
+			FirstRouteID:     t.FirstRouteID,
+			FirstRouteName:   firstRouteName,
+			SecondRouteID:    t.SecondRouteID,
+			SecondRouteName:  extractRouteName(t.SecondRouteID),
+			OriginStop:       originStop,
+			TransferStop:     transferStop,
+			DestStop:         destStop,
+			FirstLegArrivals: etas,
+		})
+	}
+
+	if results == nil {
+		results = []CandidateRoute{}
+	}
+	if transferRoutes == nil {
+		transferRoutes = []TransferRoute{}
+	}
+
+	return &RouteArrivalsResult{
+		CandidateRoutes: results,
+		TransferRoutes:  transferRoutes,
+	}, nil
 }

@@ -55,7 +55,7 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 	// route_arrivals
 	s.AddTool(
 		mcp.NewTool("route_arrivals",
-			mcp.WithDescription("Find direct bus routes connecting an origin to a destination and get real-time arrival times at the origin stops. Searches for routes where a bus stop near the origin comes before a bus stop near the destination in the route sequence."),
+			mcp.WithDescription("Find bus routes connecting an origin to a destination and get real-time arrival times. Returns direct routes where a single bus connects origin to destination, as well as transfer routes that require changing buses once at an intermediate stop."),
 			mcp.WithNumber("latitude",
 				mcp.Required(),
 				mcp.Description("Latitude of the origin location (WGS84)"),

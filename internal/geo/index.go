@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/models"
@@ -165,4 +166,108 @@ func dedupe(ss []string) []string {
 		}
 	}
 	return result
+}
+
+// TransferResult represents a one-transfer route found via SQL query.
+type TransferResult struct {
+	FirstRouteID   string
+	OriginStopID   string
+	TransferStopID string
+	SecondRouteID  string
+	DestStopID     string
+}
+
+// FindTransferRoutes finds one-transfer routes between sets of origin and
+// destination stops using SQL. It joins route_stops to itself to discover
+// pairs of routes sharing a common transfer stop, where the first route
+// serves an origin stop before the transfer stop and the second route
+// serves the transfer stop before a destination stop.
+func (idx *StopIndex) FindTransferRoutes(originStopIDs, destStopIDs []string, maxResults int) ([]TransferResult, error) {
+	if idx.db == nil || len(originStopIDs) == 0 || len(destStopIDs) == 0 {
+		return nil, nil
+	}
+	if maxResults <= 0 {
+		maxResults = 20
+	}
+
+	nOrigin := len(originStopIDs)
+	nDest := len(destStopIDs)
+
+	originPH := placeholders(1, nOrigin)
+	destPH := placeholders(nOrigin+1, nDest)
+	limitPH := fmt.Sprintf("$%d", nOrigin+nDest+1)
+
+	query := fmt.Sprintf(`
+		WITH first_leg AS (
+			SELECT rs_o.route_id,
+			       rs_o.stop_id   AS origin_stop_id,
+			       rs_o.stop_seq  AS origin_seq,
+			       rs_t.stop_id   AS transfer_stop_id,
+			       rs_t.stop_seq  AS transfer_seq
+			FROM route_stops rs_o
+			JOIN route_stops rs_t
+			  ON rs_t.route_id = rs_o.route_id
+			 AND rs_t.stop_seq > rs_o.stop_seq
+			WHERE rs_o.stop_id IN (%s)
+		),
+		second_leg AS (
+			SELECT rs_d.route_id,
+			       rs_d.stop_id   AS dest_stop_id,
+			       rs_d.stop_seq  AS dest_seq,
+			       rs_t.stop_id   AS transfer_stop_id,
+			       rs_t.stop_seq  AS transfer_seq
+			FROM route_stops rs_d
+			JOIN route_stops rs_t
+			  ON rs_t.route_id = rs_d.route_id
+			 AND rs_t.stop_seq < rs_d.stop_seq
+			WHERE rs_d.stop_id IN (%s)
+		)
+		SELECT DISTINCT ON (f.route_id, s.route_id)
+			f.route_id,
+			f.origin_stop_id,
+			f.transfer_stop_id,
+			s.route_id,
+			s.dest_stop_id
+		FROM first_leg f
+		JOIN second_leg s ON f.transfer_stop_id = s.transfer_stop_id
+		WHERE f.route_id != s.route_id
+		ORDER BY f.route_id, s.route_id,
+		         (f.transfer_seq - f.origin_seq) + (s.dest_seq - s.transfer_seq)
+		LIMIT %s
+	`, originPH, destPH, limitPH)
+
+	args := make([]interface{}, 0, nOrigin+nDest+1)
+	for _, id := range originStopIDs {
+		args = append(args, id)
+	}
+	for _, id := range destStopIDs {
+		args = append(args, id)
+	}
+	args = append(args, maxResults)
+
+	rows, err := idx.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("transfer query: %w", err)
+	}
+	defer rows.Close()
+
+	var results []TransferResult
+	for rows.Next() {
+		var r TransferResult
+		if err := rows.Scan(&r.FirstRouteID, &r.OriginStopID, &r.TransferStopID, &r.SecondRouteID, &r.DestStopID); err != nil {
+			return nil, fmt.Errorf("scan transfer: %w", err)
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
+// placeholders generates a comma-separated list of PostgreSQL parameter
+// placeholders ($start, $start+1, ..., $start+count-1).
+func placeholders(start, count int) string {
+	parts := make([]string, count)
+	for i := 0; i < count; i++ {
+		parts[i] = fmt.Sprintf("$%d", start+i)
+	}
+	return strings.Join(parts, ", ")
 }
