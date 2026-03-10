@@ -22,6 +22,9 @@ const (
 Respond with ONLY one word: "yes" or "no".
 - "yes" if the message is about HK buses, transportation between locations, location sharing, or is a greeting/general conversation starter.
 - "no" if the message is clearly about something unrelated to HK bus transportation.`
+
+	compressPrompt = `You are a conversation summarizer. Summarize the following conversation between a user and a Hong Kong bus assistant. Preserve key context: locations mentioned, bus routes discussed, user preferences, and outcomes. Be concise but comprehensive.
+Write the summary as a brief narrative. Output only the summary, nothing else.`
 )
 
 func getSystemPrompt() string {
@@ -144,6 +147,30 @@ func (c *AIClient) Chat(ctx context.Context, history []Message, userMessage stri
 	}
 
 	return "", fmt.Errorf("exceeded max tool iterations")
+}
+
+// CompressHistory calls the AI to summarize a conversation history into a single concise summary.
+func (c *AIClient) CompressHistory(ctx context.Context, messages []Message) (string, error) {
+	var sb strings.Builder
+	for _, m := range messages {
+		sb.WriteString(fmt.Sprintf("%s: %s\n", m.Role, m.Content))
+	}
+
+	chatMsgs := []chatMessage{
+		{Role: "system", Content: compressPrompt},
+		{Role: "user", Content: sb.String()},
+	}
+
+	resp, err := c.callCompletions(ctx, chatMsgs)
+	if err != nil {
+		return "", fmt.Errorf("compress history: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices in compress response")
+	}
+
+	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
 }
 
 func (c *AIClient) buildMessages(history []Message, userMessage string) []chatMessage {

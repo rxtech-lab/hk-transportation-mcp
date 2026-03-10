@@ -50,6 +50,42 @@ func (r *Repository) GetHistory(ctx context.Context, jid string) ([]Message, err
 	return msgs, rows.Err()
 }
 
+// MaxMessages returns the configured message threshold.
+func (r *Repository) MaxMessages() int {
+	return r.maxMessages
+}
+
+// CountMessages returns the number of messages stored for a JID.
+func (r *Repository) CountMessages(ctx context.Context, jid string) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM chat_messages WHERE jid = $1`, jid).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count messages: %w", err)
+	}
+	return count, nil
+}
+
+// CompressMessages replaces all messages for a JID with a single summary message.
+func (r *Repository) CompressMessages(ctx context.Context, jid, summary string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM chat_messages WHERE jid = $1`, jid); err != nil {
+		return fmt.Errorf("delete messages: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO chat_messages (jid, role, content) VALUES ($1, $2, $3)
+	`, jid, "system", summary); err != nil {
+		return fmt.Errorf("insert summary: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 // SaveMessage inserts a message and trims old messages beyond the window.
 func (r *Repository) SaveMessage(ctx context.Context, jid, role, content string) error {
 	tx, err := r.db.BeginTx(ctx, nil)

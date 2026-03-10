@@ -180,6 +180,45 @@ func (h *Handler) processMessage(payload WebhookPayload) {
 	} else {
 		log.Printf("whatsapp: reply sent to %s", jid)
 	}
+
+	// Compress history if messages exceed threshold (runs after response is sent)
+	go h.compressIfNeeded(context.Background(), jid)
+}
+
+func (h *Handler) compressIfNeeded(ctx context.Context, jid string) {
+	count, err := h.repo.CountMessages(ctx, jid)
+	if err != nil {
+		log.Printf("whatsapp: count messages for %s: %v", jid, err)
+		return
+	}
+
+	if count < h.repo.MaxMessages() {
+		return
+	}
+
+	log.Printf("whatsapp: compressing %d messages for %s", count, jid)
+
+	// Load full history for compression
+	history, err := h.repo.GetHistory(ctx, jid)
+	if err != nil {
+		log.Printf("whatsapp: get history for compression %s: %v", jid, err)
+		return
+	}
+
+	// Use AI to summarize
+	summary, err := h.ai.CompressHistory(ctx, history)
+	if err != nil {
+		log.Printf("whatsapp: compress history for %s: %v", jid, err)
+		return
+	}
+
+	// Replace all messages with the compressed summary
+	if err := h.repo.CompressMessages(ctx, jid, summary); err != nil {
+		log.Printf("whatsapp: save compressed history for %s: %v", jid, err)
+		return
+	}
+
+	log.Printf("whatsapp: compressed %d messages into summary for %s", count, jid)
 }
 
 func (h *Handler) extractText(msg MessageContent) string {
