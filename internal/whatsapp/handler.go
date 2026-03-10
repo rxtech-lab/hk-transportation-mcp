@@ -182,7 +182,7 @@ func (h *Handler) processMessage(payload WebhookPayload) {
 	}
 
 	// Compress history if messages exceed threshold (runs after response is sent)
-	h.compressIfNeeded(ctx, jid)
+	go h.compressIfNeeded(context.Background(), jid)
 }
 
 func (h *Handler) compressIfNeeded(ctx context.Context, jid string) {
