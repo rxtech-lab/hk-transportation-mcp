@@ -235,7 +235,7 @@ func (idx *StopIndex) FindTransferRoutes(originStopIDs, destStopIDs []string, ma
 		maxResults = 20
 	}
 	if maxTransfers < 0 {
-		maxTransfers = 3
+		maxTransfers = 2
 	}
 
 	originNodeIDs, err := idx.getNodeIDs(originStopIDs)

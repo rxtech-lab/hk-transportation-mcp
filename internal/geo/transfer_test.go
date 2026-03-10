@@ -436,7 +436,7 @@ func TestBuildTransitGraph_Success(t *testing.T) {
 	idx := NewStopIndex(db)
 
 	// Expect truncate
-	mock.ExpectExec("TRUNCATE transit_edges, transit_node_map").
+	mock.ExpectExec("TRUNCATE transit_edges, transit_node_map RESTART IDENTITY").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	// Expect node map population
