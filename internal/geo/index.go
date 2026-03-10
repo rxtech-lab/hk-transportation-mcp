@@ -3,6 +3,7 @@ package geo
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -168,98 +169,262 @@ func dedupe(ss []string) []string {
 	return result
 }
 
-// TransferResult represents a one-transfer route found via SQL query.
-type TransferResult struct {
-	FirstRouteID   string
-	OriginStopID   string
-	TransferStopID string
-	SecondRouteID  string
-	DestStopID     string
+// TransferLeg represents one leg of a multi-transfer route.
+type TransferLeg struct {
+	RouteID      string
+	BoardStopID  string
+	AlightStopID string
 }
 
-// FindTransferRoutes finds one-transfer routes between sets of origin and
-// destination stops using SQL. It joins route_stops to itself to discover
-// pairs of routes sharing a common transfer stop, where the first route
-// serves an origin stop before the transfer stop and the second route
-// serves the transfer stop before a destination stop.
-func (idx *StopIndex) FindTransferRoutes(originStopIDs, destStopIDs []string, maxResults int) ([]TransferResult, error) {
+// TransferResult represents a complete route with zero or more transfers,
+// found via pgRouting's shortest path algorithm.
+type TransferResult struct {
+	Legs []TransferLeg
+}
+
+// BuildTransitGraph populates the transit_node_map and transit_edges tables
+// from bus_stops and route_stops data for use with pgRouting.
+func (idx *StopIndex) BuildTransitGraph() error {
+	if idx.db == nil {
+		return nil
+	}
+	log.Println("Building transit graph for pgRouting...")
+
+	if _, err := idx.db.Exec("TRUNCATE transit_edges, transit_node_map RESTART IDENTITY"); err != nil {
+		return fmt.Errorf("truncate transit tables: %w", err)
+	}
+
+	result, err := idx.db.Exec(`
+		INSERT INTO transit_node_map (stop_id)
+		SELECT DISTINCT stop_id FROM bus_stops
+	`)
+	if err != nil {
+		return fmt.Errorf("populate node map: %w", err)
+	}
+	nodeCount, _ := result.RowsAffected()
+
+	result, err = idx.db.Exec(`
+		WITH ordered_stops AS (
+			SELECT route_id, stop_id, stop_seq,
+			       LEAD(stop_id) OVER (PARTITION BY route_id ORDER BY stop_seq) AS next_stop_id
+			FROM route_stops
+		)
+		INSERT INTO transit_edges (source, target, cost, route_id)
+		SELECT nm1.node_id, nm2.node_id, 1.0, os.route_id
+		FROM ordered_stops os
+		JOIN transit_node_map nm1 ON nm1.stop_id = os.stop_id
+		JOIN transit_node_map nm2 ON nm2.stop_id = os.next_stop_id
+		WHERE os.next_stop_id IS NOT NULL
+	`)
+	if err != nil {
+		return fmt.Errorf("populate edges: %w", err)
+	}
+	edgeCount, _ := result.RowsAffected()
+
+	log.Printf("Transit graph built: %d nodes, %d edges", nodeCount, edgeCount)
+	return nil
+}
+
+// FindTransferRoutes uses pgRouting's pgr_dijkstra to find routes between
+// origin and destination stops that may require multiple transfers.
+func (idx *StopIndex) FindTransferRoutes(originStopIDs, destStopIDs []string, maxTransfers, maxResults int) ([]TransferResult, error) {
 	if idx.db == nil || len(originStopIDs) == 0 || len(destStopIDs) == 0 {
 		return nil, nil
 	}
 	if maxResults <= 0 {
 		maxResults = 20
 	}
+	if maxTransfers < 0 {
+		maxTransfers = 3
+	}
 
-	nOrigin := len(originStopIDs)
-	nDest := len(destStopIDs)
+	originNodeIDs, err := idx.getNodeIDs(originStopIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get origin node IDs: %w", err)
+	}
+	destNodeIDs, err := idx.getNodeIDs(destStopIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get dest node IDs: %w", err)
+	}
 
-	originPH := placeholders(1, nOrigin)
-	destPH := placeholders(nOrigin+1, nDest)
-	limitPH := fmt.Sprintf("$%d", nOrigin+nDest+1)
+	if len(originNodeIDs) == 0 || len(destNodeIDs) == 0 {
+		return nil, nil
+	}
 
 	query := fmt.Sprintf(`
-		WITH first_leg AS (
-			SELECT rs_o.route_id,
-			       rs_o.stop_id   AS origin_stop_id,
-			       rs_o.stop_seq  AS origin_seq,
-			       rs_t.stop_id   AS transfer_stop_id,
-			       rs_t.stop_seq  AS transfer_seq
-			FROM route_stops rs_o
-			JOIN route_stops rs_t
-			  ON rs_t.route_id = rs_o.route_id
-			 AND rs_t.stop_seq > rs_o.stop_seq
-			WHERE rs_o.stop_id IN (%s)
-		),
-		second_leg AS (
-			SELECT rs_d.route_id,
-			       rs_d.stop_id   AS dest_stop_id,
-			       rs_d.stop_seq  AS dest_seq,
-			       rs_t.stop_id   AS transfer_stop_id,
-			       rs_t.stop_seq  AS transfer_seq
-			FROM route_stops rs_d
-			JOIN route_stops rs_t
-			  ON rs_t.route_id = rs_d.route_id
-			 AND rs_t.stop_seq < rs_d.stop_seq
-			WHERE rs_d.stop_id IN (%s)
-		)
-		SELECT DISTINCT ON (f.route_id, s.route_id)
-			f.route_id,
-			f.origin_stop_id,
-			f.transfer_stop_id,
-			s.route_id,
-			s.dest_stop_id
-		FROM first_leg f
-		JOIN second_leg s ON f.transfer_stop_id = s.transfer_stop_id
-		WHERE f.route_id != s.route_id
-		ORDER BY f.route_id, s.route_id,
-		         (f.transfer_seq - f.origin_seq) + (s.dest_seq - s.transfer_seq)
-		LIMIT %s
-	`, originPH, destPH, limitPH)
+		SELECT p.path_seq, p.start_vid, p.end_vid, p.node, p.edge, p.agg_cost,
+		       COALESCE(nm.stop_id, '') AS stop_id,
+		       COALESCE(te.route_id, '') AS route_id
+		FROM pgr_dijkstra(
+			'SELECT id, source, target, cost FROM transit_edges',
+			ARRAY[%s]::BIGINT[],
+			ARRAY[%s]::BIGINT[],
+			directed => true
+		) p
+		LEFT JOIN transit_edges te ON te.id = p.edge
+		LEFT JOIN transit_node_map nm ON nm.node_id = p.node
+		ORDER BY p.start_vid, p.end_vid, p.path_seq
+	`, int64ArrayStr(originNodeIDs), int64ArrayStr(destNodeIDs))
 
-	args := make([]interface{}, 0, nOrigin+nDest+1)
-	for _, id := range originStopIDs {
-		args = append(args, id)
-	}
-	for _, id := range destStopIDs {
-		args = append(args, id)
-	}
-	args = append(args, maxResults)
-
-	rows, err := idx.db.Query(query, args...)
+	rows, err := idx.db.Query(query)
 	if err != nil {
-		return nil, fmt.Errorf("transfer query: %w", err)
+		return nil, fmt.Errorf("pgr_dijkstra query: %w", err)
 	}
 	defer rows.Close()
 
-	var results []TransferResult
-	for rows.Next() {
-		var r TransferResult
-		if err := rows.Scan(&r.FirstRouteID, &r.OriginStopID, &r.TransferStopID, &r.SecondRouteID, &r.DestStopID); err != nil {
-			return nil, fmt.Errorf("scan transfer: %w", err)
-		}
-		results = append(results, r)
+	type pathKey struct {
+		startVid int64
+		endVid   int64
 	}
-	return results, rows.Err()
+	pathMap := make(map[pathKey][]pathStep)
+	var pathOrder []pathKey
+
+	for rows.Next() {
+		var s pathStep
+		if err := rows.Scan(&s.pathSeq, &s.startVid, &s.endVid, &s.node, &s.edge, &s.aggCost, &s.stopID, &s.routeID); err != nil {
+			return nil, fmt.Errorf("scan path step: %w", err)
+		}
+		key := pathKey{s.startVid, s.endVid}
+		if _, exists := pathMap[key]; !exists {
+			pathOrder = append(pathOrder, key)
+		}
+		pathMap[key] = append(pathMap[key], s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate path rows: %w", err)
+	}
+
+	var results []TransferResult
+	seen := make(map[string]struct{})
+
+	for _, key := range pathOrder {
+		steps := pathMap[key]
+		legs := decomposePath(steps)
+
+		if len(legs) == 0 {
+			continue
+		}
+
+		numTransfers := len(legs) - 1
+		if numTransfers > maxTransfers {
+			continue
+		}
+
+		sig := legSignature(legs)
+		if _, ok := seen[sig]; ok {
+			continue
+		}
+		seen[sig] = struct{}{}
+
+		results = append(results, TransferResult{Legs: legs})
+
+		if len(results) >= maxResults {
+			break
+		}
+	}
+
+	return results, nil
+}
+
+// pathStep holds one row from the pgr_dijkstra result.
+type pathStep struct {
+	pathSeq  int
+	startVid int64
+	endVid   int64
+	node     int64
+	edge     int64
+	aggCost  float64
+	stopID   string
+	routeID  string
+}
+
+// decomposePath converts a sequence of pgr_dijkstra path steps into transfer
+// legs. Each leg is a consecutive run of edges on the same route.
+func decomposePath(steps []pathStep) []TransferLeg {
+	if len(steps) < 2 {
+		return nil
+	}
+
+	var legs []TransferLeg
+	var currentRouteID string
+	var boardStopID string
+
+	for _, step := range steps {
+		if step.edge < 0 {
+			// Last step – close current leg
+			if currentRouteID != "" {
+				legs = append(legs, TransferLeg{
+					RouteID:      currentRouteID,
+					BoardStopID:  boardStopID,
+					AlightStopID: step.stopID,
+				})
+			}
+			continue
+		}
+
+		if currentRouteID == "" {
+			// First edge – start first leg
+			currentRouteID = step.routeID
+			boardStopID = step.stopID
+		} else if step.routeID != currentRouteID {
+			// Route changed – transfer
+			legs = append(legs, TransferLeg{
+				RouteID:      currentRouteID,
+				BoardStopID:  boardStopID,
+				AlightStopID: step.stopID,
+			})
+			currentRouteID = step.routeID
+			boardStopID = step.stopID
+		}
+	}
+
+	return legs
+}
+
+// getNodeIDs maps stop IDs to transit_node_map integer node IDs.
+func (idx *StopIndex) getNodeIDs(stopIDs []string) ([]int64, error) {
+	if len(stopIDs) == 0 {
+		return nil, nil
+	}
+	ph := placeholders(1, len(stopIDs))
+	query := fmt.Sprintf("SELECT node_id FROM transit_node_map WHERE stop_id IN (%s)", ph)
+	args := make([]interface{}, len(stopIDs))
+	for i, id := range stopIDs {
+		args[i] = id
+	}
+	rows, err := idx.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodeIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		nodeIDs = append(nodeIDs, id)
+	}
+	return nodeIDs, rows.Err()
+}
+
+// legSignature produces a deterministic string key for deduplication.
+func legSignature(legs []TransferLeg) string {
+	parts := make([]string, len(legs))
+	for i, l := range legs {
+		parts[i] = l.RouteID + ":" + l.BoardStopID + "->" + l.AlightStopID
+	}
+	return strings.Join(parts, "|")
+}
+
+// int64ArrayStr formats a slice of int64 as a comma-separated string for SQL.
+func int64ArrayStr(ids []int64) string {
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = fmt.Sprintf("%d", id)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // placeholders generates a comma-separated list of numbered SQL parameter

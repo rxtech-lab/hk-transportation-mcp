@@ -32,6 +32,7 @@ func migrate(db *sql.DB) error {
 
 	statements := []string{
 		`CREATE EXTENSION IF NOT EXISTS postgis`,
+		`CREATE EXTENSION IF NOT EXISTS pgrouting`,
 		`CREATE TABLE IF NOT EXISTS bus_stops (
 			stop_id TEXT PRIMARY KEY,
 			name_en TEXT NOT NULL DEFAULT '',
@@ -60,6 +61,19 @@ func migrate(db *sql.DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_route_stops_stop ON route_stops(stop_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_bus_stops_geom ON bus_stops USING GIST(geom)`,
+		`CREATE TABLE IF NOT EXISTS transit_node_map (
+			node_id SERIAL PRIMARY KEY,
+			stop_id TEXT UNIQUE NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS transit_edges (
+			id SERIAL PRIMARY KEY,
+			source INTEGER NOT NULL,
+			target INTEGER NOT NULL,
+			cost DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+			route_id TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_transit_edges_source ON transit_edges(source)`,
+		`CREATE INDEX IF NOT EXISTS idx_transit_edges_target ON transit_edges(target)`,
 		`CREATE TABLE IF NOT EXISTS chat_messages (
 			id SERIAL PRIMARY KEY,
 			jid TEXT NOT NULL,

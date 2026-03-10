@@ -72,6 +72,9 @@ func main() {
 		log.Println("Run 'go run ./cmd/sync' to populate the database first")
 	} else {
 		log.Printf("Geo index loaded: %d stops", index.StopCount())
+		if err := index.BuildTransitGraph(); err != nil {
+			log.Printf("Warning: failed to build transit graph: %v", err)
+		}
 	}
 
 	// Create services

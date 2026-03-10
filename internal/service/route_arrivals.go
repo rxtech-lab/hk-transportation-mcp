@@ -46,20 +46,23 @@ type CandidateRoute struct {
 	Arrivals     []models.ETAArrival `json:"arrivals"`
 }
 
-// TransferRoute represents a route requiring one transfer between two buses.
+// TransferRoute represents a route requiring one or more transfers between buses.
 type TransferRoute struct {
-	FirstRouteID     string              `json:"first_route_id"`
-	FirstRouteName   string              `json:"first_route_name"`
-	SecondRouteID    string              `json:"second_route_id"`
-	SecondRouteName  string              `json:"second_route_name"`
-	OriginStop       models.BusStop      `json:"origin_stop"`
-	TransferStop     models.BusStop      `json:"transfer_stop"`
-	DestStop         models.BusStop      `json:"dest_stop"`
+	Legs             []TransferRouteLeg  `json:"legs"`
+	NumTransfers     int                 `json:"num_transfers"`
 	FirstLegArrivals []models.ETAArrival `json:"first_leg_arrivals"`
 }
 
+// TransferRouteLeg represents one leg of a multi-transfer route.
+type TransferRouteLeg struct {
+	RouteID    string         `json:"route_id"`
+	RouteName  string         `json:"route_name"`
+	BoardStop  models.BusStop `json:"board_stop"`
+	AlightStop models.BusStop `json:"alight_stop"`
+}
+
 // Execute finds routes connecting origin area to destination area and fetches ETAs.
-func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, destLon, radiusOrigin, radiusDest float64) (*RouteArrivalsResult, error) {
+func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, destLon, radiusOrigin, radiusDest float64, maxTransfers int) (*RouteArrivalsResult, error) {
 	originStops := s.index.FindNearby(lat, lon, radiusOrigin)
 	destStops := s.index.FindNearby(destLat, destLon, radiusDest)
 
@@ -198,36 +201,42 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 
 	var transferRoutes []TransferRoute
 
-	transfers, err := s.index.FindTransferRoutes(originStopIDs, destStopIDs, 10)
+	transfers, err := s.index.FindTransferRoutes(originStopIDs, destStopIDs, maxTransfers, 10)
 	if err != nil {
 		log.Printf("transfer route search failed (origins=%d, dests=%d): %v", len(originStopIDs), len(destStopIDs), err)
 	}
 
 	for _, t := range transfers {
-		originStop, ok := s.index.GetStop(t.OriginStopID)
-		if !ok {
-			continue
+		var legs []TransferRouteLeg
+		valid := true
+		for _, leg := range t.Legs {
+			boardStop, ok := s.index.GetStop(leg.BoardStopID)
+			if !ok {
+				valid = false
+				break
+			}
+			alightStop, ok := s.index.GetStop(leg.AlightStopID)
+			if !ok {
+				valid = false
+				break
+			}
+			legs = append(legs, TransferRouteLeg{
+				RouteID:    leg.RouteID,
+				RouteName:  extractRouteName(leg.RouteID),
+				BoardStop:  boardStop,
+				AlightStop: alightStop,
+			})
 		}
-		transferStop, ok := s.index.GetStop(t.TransferStopID)
-		if !ok {
-			continue
-		}
-		destStop, ok := s.index.GetStop(t.DestStopID)
-		if !ok {
+		if !valid || len(legs) == 0 {
 			continue
 		}
 
-		firstRouteName := extractRouteName(t.FirstRouteID)
-		etas := nearbyService.fetchETACached(ctx, originStop, firstRouteName)
+		firstLegRouteName := legs[0].RouteName
+		etas := nearbyService.fetchETACached(ctx, legs[0].BoardStop, firstLegRouteName)
 
 		transferRoutes = append(transferRoutes, TransferRoute{
-			FirstRouteID:     t.FirstRouteID,
-			FirstRouteName:   firstRouteName,
-			SecondRouteID:    t.SecondRouteID,
-			SecondRouteName:  extractRouteName(t.SecondRouteID),
-			OriginStop:       originStop,
-			TransferStop:     transferStop,
-			DestStop:         destStop,
+			Legs:             legs,
+			NumTransfers:     len(legs) - 1,
 			FirstLegArrivals: etas,
 		})
 	}

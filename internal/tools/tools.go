@@ -55,7 +55,7 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 	// route_arrivals
 	s.AddTool(
 		mcp.NewTool("route_arrivals",
-			mcp.WithDescription("Find bus routes connecting an origin to a destination and get real-time arrival times. Returns direct routes where a single bus connects origin to destination, as well as transfer routes that require changing buses once at an intermediate stop."),
+			mcp.WithDescription("Find bus routes connecting an origin to a destination and get real-time arrival times. Returns direct routes and transfer routes supporting multiple transfers via pgRouting shortest-path search."),
 			mcp.WithNumber("latitude",
 				mcp.Required(),
 				mcp.Description("Latitude of the origin location (WGS84)"),
@@ -80,6 +80,10 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 				mcp.Description("Search radius around destination in meters (default: 300)"),
 				mcp.DefaultNumber(300),
 			),
+			mcp.WithNumber("max_transfers",
+				mcp.Description("Maximum number of transfers allowed for transfer routes (default: 2)"),
+				mcp.DefaultNumber(2),
+			),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			lat, err := req.RequireFloat("latitude")
@@ -100,8 +104,9 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 			}
 			radiusOrigin := req.GetFloat("radius_origin", 300)
 			radiusDest := req.GetFloat("radius_dest", 300)
+			maxTransfers := req.GetInt("max_transfers", 2)
 
-			result, err := route.Execute(ctx, lat, lon, destLat, destLon, radiusOrigin, radiusDest)
+			result, err := route.Execute(ctx, lat, lon, destLat, destLon, radiusOrigin, radiusDest, maxTransfers)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 			}
