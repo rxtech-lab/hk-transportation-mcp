@@ -262,7 +262,7 @@ func (idx *StopIndex) FindTransferRoutes(originStopIDs, destStopIDs []string, ma
 	return results, rows.Err()
 }
 
-// placeholders generates a comma-separated list of PostgreSQL parameter
+// placeholders generates a comma-separated list of numbered SQL parameter
 // placeholders ($start, $start+1, ..., $start+count-1).
 func placeholders(start, count int) string {
 	parts := make([]string, count)

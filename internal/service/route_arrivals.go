@@ -200,7 +200,7 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 
 	transfers, err := s.index.FindTransferRoutes(originStopIDs, destStopIDs, 10)
 	if err != nil {
-		log.Printf("transfer route search failed: %v", err)
+		log.Printf("transfer route search failed (origins=%d, dests=%d): %v", len(originStopIDs), len(destStopIDs), err)
 	}
 
 	for _, t := range transfers {
