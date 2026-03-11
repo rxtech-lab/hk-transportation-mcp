@@ -239,14 +239,19 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 			continue
 		}
 
-		// Count bus-to-bus transfers (walking legs don't count as separate transfers)
-		for i := 1; i < len(legs); i++ {
-			if !legs[i].IsWalking && !legs[i-1].IsWalking {
-				busTransfers++
-			} else if !legs[i].IsWalking && legs[i-1].IsWalking && i >= 2 {
-				busTransfers++
+		// Count actual bus transfers — the number of times the passenger
+		// switches from one bus route to another (walking legs in between
+		// are transparent and don't add to the count).
+		prevBusIdx := -1
+		for i, leg := range legs {
+			if !leg.IsWalking {
+				if prevBusIdx >= 0 {
+					busTransfers++
+				}
+				prevBusIdx = i
 			}
 		}
+		_ = prevBusIdx
 
 		// Fetch ETAs for the first bus leg
 		var etas []models.ETAArrival

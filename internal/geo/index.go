@@ -239,15 +239,24 @@ func (idx *StopIndex) BuildTransitGraph() error {
 
 	// Add walking edges between nearby stops (within DefaultWalkRadiusM)
 	// so pgr_dijkstra can find transfers that require walking.
+	// Note: WalkEdgeCost, WalkRouteID, and DefaultWalkRadiusM are compile-time
+	// constants, so direct formatting is safe from SQL injection.
+	// The query uses s1.stop_id < s2.stop_id to avoid duplicate pairs, then
+	// inserts both directions explicitly for bidirectional walking.
 	result, err = idx.db.Exec(fmt.Sprintf(`
+		WITH walk_pairs AS (
+			SELECT nm1.node_id AS n1, nm2.node_id AS n2
+			FROM bus_stops s1
+			JOIN bus_stops s2 ON s1.stop_id < s2.stop_id
+			    AND ST_DWithin(s1.geom, s2.geom, %f)
+			JOIN transit_node_map nm1 ON nm1.stop_id = s1.stop_id
+			JOIN transit_node_map nm2 ON nm2.stop_id = s2.stop_id
+		)
 		INSERT INTO transit_edges (source, target, cost, route_id)
-		SELECT nm1.node_id, nm2.node_id, %f, '%s'
-		FROM bus_stops s1
-		JOIN bus_stops s2 ON s1.stop_id != s2.stop_id
-		    AND ST_DWithin(s1.geom, s2.geom, %f)
-		JOIN transit_node_map nm1 ON nm1.stop_id = s1.stop_id
-		JOIN transit_node_map nm2 ON nm2.stop_id = s2.stop_id
-	`, WalkEdgeCost, WalkRouteID, DefaultWalkRadiusM))
+		SELECT n1, n2, %f, '%s' FROM walk_pairs
+		UNION ALL
+		SELECT n2, n1, %f, '%s' FROM walk_pairs
+	`, DefaultWalkRadiusM, WalkEdgeCost, WalkRouteID, WalkEdgeCost, WalkRouteID))
 	if err != nil {
 		return fmt.Errorf("populate walking edges: %w", err)
 	}
