@@ -54,11 +54,13 @@ type TransferRoute struct {
 }
 
 // TransferRouteLeg represents one leg of a multi-transfer route.
+// Walking legs (IsWalking=true) indicate the passenger must walk between stops.
 type TransferRouteLeg struct {
 	RouteID    string         `json:"route_id"`
 	RouteName  string         `json:"route_name"`
 	BoardStop  models.BusStop `json:"board_stop"`
 	AlightStop models.BusStop `json:"alight_stop"`
+	IsWalking  bool           `json:"is_walking"`
 }
 
 // Execute finds routes connecting origin area to destination area and fetches ETAs.
@@ -209,6 +211,7 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 	for _, t := range transfers {
 		var legs []TransferRouteLeg
 		valid := true
+		busTransfers := 0
 		for _, leg := range t.Legs {
 			boardStop, ok := s.index.GetStop(leg.BoardStopID)
 			if !ok {
@@ -220,23 +223,43 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 				valid = false
 				break
 			}
+			routeName := ""
+			if !leg.IsWalking {
+				routeName = extractRouteName(leg.RouteID)
+			}
 			legs = append(legs, TransferRouteLeg{
 				RouteID:    leg.RouteID,
-				RouteName:  extractRouteName(leg.RouteID),
+				RouteName:  routeName,
 				BoardStop:  boardStop,
 				AlightStop: alightStop,
+				IsWalking:  leg.IsWalking,
 			})
 		}
 		if !valid || len(legs) == 0 {
 			continue
 		}
 
-		firstLegRouteName := legs[0].RouteName
-		etas := nearbyService.fetchETACached(ctx, legs[0].BoardStop, firstLegRouteName)
+		// Count bus-to-bus transfers (walking legs don't count as separate transfers)
+		for i := 1; i < len(legs); i++ {
+			if !legs[i].IsWalking && !legs[i-1].IsWalking {
+				busTransfers++
+			} else if !legs[i].IsWalking && legs[i-1].IsWalking && i >= 2 {
+				busTransfers++
+			}
+		}
+
+		// Fetch ETAs for the first bus leg
+		var etas []models.ETAArrival
+		for _, leg := range legs {
+			if !leg.IsWalking {
+				etas = nearbyService.fetchETACached(ctx, leg.BoardStop, leg.RouteName)
+				break
+			}
+		}
 
 		transferRoutes = append(transferRoutes, TransferRoute{
 			Legs:             legs,
-			NumTransfers:     len(legs) - 1,
+			NumTransfers:     busTransfers,
 			FirstLegArrivals: etas,
 		})
 	}

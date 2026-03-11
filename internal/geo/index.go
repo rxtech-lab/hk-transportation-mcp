@@ -169,11 +169,25 @@ func dedupe(ss []string) []string {
 	return result
 }
 
+// WalkRouteID is a sentinel route ID used for walking transfer edges in the
+// transit graph. When decomposePath encounters an edge with this route ID it
+// marks the resulting TransferLeg as a walking leg.
+const WalkRouteID = "WALK"
+
+// DefaultWalkRadiusM is the maximum distance (in meters) between two stops for
+// a walking transfer edge to be created in the transit graph.
+const DefaultWalkRadiusM = 200.0
+
+// WalkEdgeCost is the cost assigned to walking transfer edges. It is higher
+// than the default route edge cost (1.0) to discourage unnecessary walking.
+const WalkEdgeCost = 5.0
+
 // TransferLeg represents one leg of a multi-transfer route.
 type TransferLeg struct {
 	RouteID      string
 	BoardStopID  string
 	AlightStopID string
+	IsWalking    bool
 }
 
 // TransferResult represents a complete route with zero or more transfers,
@@ -183,7 +197,9 @@ type TransferResult struct {
 }
 
 // BuildTransitGraph populates the transit_node_map and transit_edges tables
-// from bus_stops and route_stops data for use with pgRouting.
+// from bus_stops and route_stops data for use with pgRouting. It creates
+// route edges between consecutive stops on each route, and walking edges
+// between nearby stops (within DefaultWalkRadiusM) to enable walking transfers.
 func (idx *StopIndex) BuildTransitGraph() error {
 	if idx.db == nil {
 		return nil
@@ -217,11 +233,28 @@ func (idx *StopIndex) BuildTransitGraph() error {
 		WHERE os.next_stop_id IS NOT NULL
 	`)
 	if err != nil {
-		return fmt.Errorf("populate edges: %w", err)
+		return fmt.Errorf("populate route edges: %w", err)
 	}
-	edgeCount, _ := result.RowsAffected()
+	routeEdgeCount, _ := result.RowsAffected()
 
-	log.Printf("Transit graph built: %d nodes, %d edges", nodeCount, edgeCount)
+	// Add walking edges between nearby stops (within DefaultWalkRadiusM)
+	// so pgr_dijkstra can find transfers that require walking.
+	result, err = idx.db.Exec(fmt.Sprintf(`
+		INSERT INTO transit_edges (source, target, cost, route_id)
+		SELECT nm1.node_id, nm2.node_id, %f, '%s'
+		FROM bus_stops s1
+		JOIN bus_stops s2 ON s1.stop_id != s2.stop_id
+		    AND ST_DWithin(s1.geom, s2.geom, %f)
+		JOIN transit_node_map nm1 ON nm1.stop_id = s1.stop_id
+		JOIN transit_node_map nm2 ON nm2.stop_id = s2.stop_id
+	`, WalkEdgeCost, WalkRouteID, DefaultWalkRadiusM))
+	if err != nil {
+		return fmt.Errorf("populate walking edges: %w", err)
+	}
+	walkEdgeCount, _ := result.RowsAffected()
+
+	log.Printf("Transit graph built: %d nodes, %d route edges, %d walking edges",
+		nodeCount, routeEdgeCount, walkEdgeCount)
 	return nil
 }
 
@@ -339,7 +372,8 @@ type pathStep struct {
 }
 
 // decomposePath converts a sequence of pgr_dijkstra path steps into transfer
-// legs. Each leg is a consecutive run of edges on the same route.
+// legs. Each leg is a consecutive run of edges on the same route. Walking
+// edges (route_id == WalkRouteID) produce legs with IsWalking = true.
 func decomposePath(steps []pathStep) []TransferLeg {
 	if len(steps) < 2 {
 		return nil
@@ -348,8 +382,11 @@ func decomposePath(steps []pathStep) []TransferLeg {
 	var legs []TransferLeg
 	var currentRouteID string
 	var boardStopID string
+	var currentIsWalking bool
 
 	for _, step := range steps {
+		isWalk := step.routeID == WalkRouteID
+
 		if step.edge < 0 {
 			// Last step – close current leg
 			if currentRouteID != "" {
@@ -357,6 +394,7 @@ func decomposePath(steps []pathStep) []TransferLeg {
 					RouteID:      currentRouteID,
 					BoardStopID:  boardStopID,
 					AlightStopID: step.stopID,
+					IsWalking:    currentIsWalking,
 				})
 			}
 			continue
@@ -366,15 +404,18 @@ func decomposePath(steps []pathStep) []TransferLeg {
 			// First edge – start first leg
 			currentRouteID = step.routeID
 			boardStopID = step.stopID
+			currentIsWalking = isWalk
 		} else if step.routeID != currentRouteID {
-			// Route changed – transfer
+			// Route changed – transfer (or start/end walking)
 			legs = append(legs, TransferLeg{
 				RouteID:      currentRouteID,
 				BoardStopID:  boardStopID,
 				AlightStopID: step.stopID,
+				IsWalking:    currentIsWalking,
 			})
 			currentRouteID = step.routeID
 			boardStopID = step.stopID
+			currentIsWalking = isWalk
 		}
 	}
 

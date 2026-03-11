@@ -443,13 +443,150 @@ func TestBuildTransitGraph_Success(t *testing.T) {
 	mock.ExpectExec("INSERT INTO transit_node_map").
 		WillReturnResult(sqlmock.NewResult(0, 100))
 
-	// Expect edge population
+	// Expect route edge population
 	mock.ExpectExec("INSERT INTO transit_edges").
 		WillReturnResult(sqlmock.NewResult(0, 500))
+
+	// Expect walking edge population
+	mock.ExpectExec("INSERT INTO transit_edges").
+		WillReturnResult(sqlmock.NewResult(0, 50))
 
 	err = idx.BuildTransitGraph()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %s", err)
+	}
+}
+
+func TestDecomposePath_WalkingTransfer(t *testing.T) {
+	// Scenario: Bus R1 from S1→S2, walk from S2→S3, bus R2 from S3→S4
+	steps := []pathStep{
+		{pathSeq: 1, stopID: "S1", routeID: "R1", edge: 1},
+		{pathSeq: 2, stopID: "S2", routeID: WalkRouteID, edge: 2},
+		{pathSeq: 3, stopID: "S3", routeID: "R2", edge: 3},
+		{pathSeq: 4, stopID: "S4", routeID: "", edge: -1},
+	}
+
+	legs := decomposePath(steps)
+	if len(legs) != 3 {
+		t.Fatalf("expected 3 legs, got %d", len(legs))
+	}
+
+	// Leg 0: bus R1 from S1 to S2
+	if legs[0].RouteID != "R1" || legs[0].IsWalking {
+		t.Errorf("leg 0: expected bus R1, got route=%s walking=%v", legs[0].RouteID, legs[0].IsWalking)
+	}
+	if legs[0].BoardStopID != "S1" || legs[0].AlightStopID != "S2" {
+		t.Errorf("leg 0: expected S1→S2, got %s→%s", legs[0].BoardStopID, legs[0].AlightStopID)
+	}
+
+	// Leg 1: walk from S2 to S3
+	if legs[1].RouteID != WalkRouteID || !legs[1].IsWalking {
+		t.Errorf("leg 1: expected walking, got route=%s walking=%v", legs[1].RouteID, legs[1].IsWalking)
+	}
+	if legs[1].BoardStopID != "S2" || legs[1].AlightStopID != "S3" {
+		t.Errorf("leg 1: expected S2→S3, got %s→%s", legs[1].BoardStopID, legs[1].AlightStopID)
+	}
+
+	// Leg 2: bus R2 from S3 to S4
+	if legs[2].RouteID != "R2" || legs[2].IsWalking {
+		t.Errorf("leg 2: expected bus R2, got route=%s walking=%v", legs[2].RouteID, legs[2].IsWalking)
+	}
+	if legs[2].BoardStopID != "S3" || legs[2].AlightStopID != "S4" {
+		t.Errorf("leg 2: expected S3→S4, got %s→%s", legs[2].BoardStopID, legs[2].AlightStopID)
+	}
+}
+
+func TestDecomposePath_WalkAtStart(t *testing.T) {
+	// Walk from S1→S2, then bus R1 from S2→S3
+	steps := []pathStep{
+		{pathSeq: 1, stopID: "S1", routeID: WalkRouteID, edge: 1},
+		{pathSeq: 2, stopID: "S2", routeID: "R1", edge: 2},
+		{pathSeq: 3, stopID: "S3", routeID: "", edge: -1},
+	}
+
+	legs := decomposePath(steps)
+	if len(legs) != 2 {
+		t.Fatalf("expected 2 legs, got %d", len(legs))
+	}
+
+	if !legs[0].IsWalking || legs[0].RouteID != WalkRouteID {
+		t.Errorf("leg 0: expected walking, got route=%s walking=%v", legs[0].RouteID, legs[0].IsWalking)
+	}
+	if legs[0].BoardStopID != "S1" || legs[0].AlightStopID != "S2" {
+		t.Errorf("leg 0: expected S1→S2, got %s→%s", legs[0].BoardStopID, legs[0].AlightStopID)
+	}
+
+	if legs[1].IsWalking || legs[1].RouteID != "R1" {
+		t.Errorf("leg 1: expected bus R1, got route=%s walking=%v", legs[1].RouteID, legs[1].IsWalking)
+	}
+}
+
+func TestFindTransferRoutes_WalkingTransfer(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	idx := NewStopIndex(db)
+	idx.Reload([]models.BusStop{
+		{StopID: "S1", NameEn: "Origin", Lat: 22.30, Lon: 114.17, Operator: "KMB"},
+		{StopID: "S2", NameEn: "Alight", Lat: 22.305, Lon: 114.175, Operator: "KMB"},
+		{StopID: "S3", NameEn: "Walk To", Lat: 22.306, Lon: 114.176, Operator: "CTB"},
+		{StopID: "S4", NameEn: "Dest", Lat: 22.32, Lon: 114.19, Operator: "CTB"},
+	}, nil)
+
+	// Mock getNodeIDs
+	mock.ExpectQuery("SELECT node_id FROM transit_node_map").
+		WillReturnRows(sqlmock.NewRows([]string{"node_id"}).AddRow(1))
+	mock.ExpectQuery("SELECT node_id FROM transit_node_map").
+		WillReturnRows(sqlmock.NewRows([]string{"node_id"}).AddRow(4))
+
+	// pgr_dijkstra result: S1→S2 (R1), S2→S3 (WALK), S3→S4 (R2)
+	mock.ExpectQuery("pgr_dijkstra").WillReturnRows(
+		sqlmock.NewRows([]string{
+			"path_seq", "start_vid", "end_vid", "node", "edge", "agg_cost", "stop_id", "route_id",
+		}).
+			AddRow(1, 1, 4, 1, 101, 0.0, "S1", "KMB-1A-O-1").
+			AddRow(2, 1, 4, 2, 102, 1.0, "S2", WalkRouteID).
+			AddRow(3, 1, 4, 3, 103, 6.0, "S3", "CTB-5B-O-1").
+			AddRow(4, 1, 4, 4, -1, 7.0, "S4", ""),
+	)
+
+	results, err := idx.FindTransferRoutes([]string{"S1"}, []string{"S4"}, 2, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	r := results[0]
+	if len(r.Legs) != 3 {
+		t.Fatalf("expected 3 legs (bus + walk + bus), got %d", len(r.Legs))
+	}
+
+	// Verify bus leg
+	if r.Legs[0].IsWalking || r.Legs[0].RouteID != "KMB-1A-O-1" {
+		t.Errorf("leg 0: expected bus KMB-1A-O-1, got route=%s walking=%v", r.Legs[0].RouteID, r.Legs[0].IsWalking)
+	}
+
+	// Verify walking leg
+	if !r.Legs[1].IsWalking || r.Legs[1].RouteID != WalkRouteID {
+		t.Errorf("leg 1: expected walking, got route=%s walking=%v", r.Legs[1].RouteID, r.Legs[1].IsWalking)
+	}
+	if r.Legs[1].BoardStopID != "S2" || r.Legs[1].AlightStopID != "S3" {
+		t.Errorf("leg 1: expected S2→S3 walk, got %s→%s", r.Legs[1].BoardStopID, r.Legs[1].AlightStopID)
+	}
+
+	// Verify second bus leg
+	if r.Legs[2].IsWalking || r.Legs[2].RouteID != "CTB-5B-O-1" {
+		t.Errorf("leg 2: expected bus CTB-5B-O-1, got route=%s walking=%v", r.Legs[2].RouteID, r.Legs[2].IsWalking)
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {
