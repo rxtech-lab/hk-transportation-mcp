@@ -109,14 +109,14 @@ func main() {
 			log.Printf("Warning: Failed to initialize OAuth: %v", err)
 		} else {
 			handler = authenticator.Middleware(handler)
-			log.Printf("OAuth enabled — authenticated users get higher rate limits (JWKS: %s)", jwksEndpoint)
+			log.Printf("OAuth enabled — authenticated users bypass rate limiting (JWKS: %s)", jwksEndpoint)
 			defer authenticator.Close()
 		}
 	} else {
 		log.Println("OAuth not configured, all requests use default rate limit")
 	}
 
-	// Rate limiting (Redis-backed): 1 req/s unauthenticated, 10 req/s authenticated
+	// Rate limiting (Redis-backed): 1 req/s for unauthenticated users; authenticated users bypass rate limiting
 	rl := ratelimit.New(ratelimit.DefaultConfig(), redisConn.Client())
 	handler = rl.Middleware(handler)
 

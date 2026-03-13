@@ -134,13 +134,13 @@ func TestMiddleware_Unauthenticated(t *testing.T) {
 	}
 }
 
-func TestMiddleware_AuthenticatedHigherLimit(t *testing.T) {
+func TestMiddleware_AuthenticatedNoRateLimit(t *testing.T) {
 	_, client := setupRedis(t)
 	defer client.Close()
 
 	rl := New(Config{
 		DefaultMaxRequests: 1,
-		AuthMaxRequests:    3,
+		AuthMaxRequests:    10,
 		Window:             1 * time.Second,
 	}, client)
 
@@ -148,8 +148,8 @@ func TestMiddleware_AuthenticatedHigherLimit(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	// Authenticated requests should get higher limit
-	for i := 0; i < 3; i++ {
+	// Authenticated requests should never be rate-limited
+	for i := 0; i < 20; i++ {
 		req := httptest.NewRequest("POST", "/mcp", nil)
 		req.RemoteAddr = "10.0.0.2:5000"
 		req.Header.Set("X-Authenticated-Subject", "user-abc")
@@ -158,16 +158,6 @@ func TestMiddleware_AuthenticatedHigherLimit(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200 on request %d, got %d", i+1, rec.Code)
 		}
-	}
-
-	// 4th should be denied
-	req := httptest.NewRequest("POST", "/mcp", nil)
-	req.RemoteAddr = "10.0.0.2:5000"
-	req.Header.Set("X-Authenticated-Subject", "user-abc")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("expected 429, got %d", rec.Code)
 	}
 }
 
