@@ -251,13 +251,17 @@ func (c *AIClient) executeTool(ctx context.Context, name, argsJSON string) (stri
 		destLon, _ := args["dest_lon"].(float64)
 		radiusOrigin := 300.0
 		radiusDest := 300.0
+		maxTransfers := 2
 		if r, ok := args["radius_origin"].(float64); ok {
 			radiusOrigin = r
 		}
 		if r, ok := args["radius_dest"].(float64); ok {
 			radiusDest = r
 		}
-		result, err := c.executor.Route.Execute(ctx, lat, lon, destLat, destLon, radiusOrigin, radiusDest)
+		if m, ok := args["max_transfers"].(float64); ok {
+			maxTransfers = int(m)
+		}
+		result, err := c.executor.Route.Execute(ctx, lat, lon, destLat, destLon, radiusOrigin, radiusDest, maxTransfers)
 		if err != nil {
 			return "", err
 		}

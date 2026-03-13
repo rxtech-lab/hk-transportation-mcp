@@ -162,6 +162,11 @@ func (s *Syncer) FullSync(ctx context.Context) error {
 	log.Println("sync: reloading in-memory index...")
 	s.index.Reload(allStops, allRStops)
 
+	// Rebuild pgRouting transit graph
+	if err := s.index.BuildTransitGraph(); err != nil {
+		log.Printf("sync: failed to rebuild transit graph: %v", err)
+	}
+
 	log.Printf("Full sync completed in %v: %d stops, %d route-stops",
 		time.Since(start), len(allStops), len(allRStops))
 	return firstErr
