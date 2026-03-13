@@ -88,18 +88,19 @@ func (l *Limiter) Allow(ctx context.Context, key string, isAuthenticated bool) b
 
 // Middleware returns an HTTP middleware that rate-limits requests.
 // It uses the "X-Authenticated-Subject" header (set by the optional OAuth middleware)
-// to determine auth status and key. Unauthenticated requests are keyed by IP.
+// to determine auth status. Authenticated users bypass rate limiting entirely.
+// Unauthenticated requests are keyed by IP.
 func (l *Limiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		subject := r.Header.Get("X-Authenticated-Subject")
-		isAuth := subject != ""
-
-		key := r.RemoteAddr
-		if isAuth {
-			key = "auth:" + subject
+		if subject != "" {
+			// Authenticated users are not rate-limited.
+			next.ServeHTTP(w, r)
+			return
 		}
 
-		if !l.Allow(r.Context(), key, isAuth) {
+		key := r.RemoteAddr
+		if !l.Allow(r.Context(), key, false) {
 			http.Error(w, `{"error":"rate limit exceeded"}`, http.StatusTooManyRequests)
 			return
 		}
