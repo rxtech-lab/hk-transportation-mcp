@@ -32,6 +32,8 @@ spec:
           envFrom:
             - secretRef:
                 name: hk-transportation-mcp-secret
+            - configMapRef:
+                name: hk-transportation-mcp-config
           volumeMounts:
             - name: config
               mountPath: /app/config.yaml
