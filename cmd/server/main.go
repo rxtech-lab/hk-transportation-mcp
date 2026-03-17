@@ -98,8 +98,13 @@ func main() {
 	// Create Streamable HTTP server
 	streamableServer := server.NewStreamableHTTPServer(mcpServer)
 
-	// Build the HTTP handler chain: streamableServer -> OAuth (optional) -> rate limit
+	// Build the HTTP handler chain: OAuth (optional) -> rate limit -> streamableServer
+	// OAuth must run first so it sets X-Authenticated-Subject before the rate limiter checks it.
 	var handler http.Handler = streamableServer
+
+	// Rate limiting (Redis-backed): 1 req/s for unauthenticated users; authenticated users bypass rate limiting
+	rl := ratelimit.New(ratelimit.DefaultConfig(), redisConn.Client())
+	handler = rl.Middleware(handler)
 
 	if cfg.OAuthServerURL != "" {
 		jwksEndpoint := cfg.OAuthServerURL + "/.well-known/jwks.json"
@@ -118,10 +123,6 @@ func main() {
 	} else {
 		log.Println("OAuth not configured, all requests use default rate limit")
 	}
-
-	// Rate limiting (Redis-backed): 1 req/s for unauthenticated users; authenticated users bypass rate limiting
-	rl := ratelimit.New(ratelimit.DefaultConfig(), redisConn.Client())
-	handler = rl.Middleware(handler)
 
 	// Setup HTTP mux
 	mux := http.NewServeMux()
