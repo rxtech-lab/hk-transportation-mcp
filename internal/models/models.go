@@ -34,12 +34,13 @@ type RouteStop struct {
 
 // ETAArrival represents an estimated time of arrival at a bus stop.
 type ETAArrival struct {
-	Route     string     `json:"route"`
-	Direction string     `json:"direction"`
-	StopName  string     `json:"stop_name"`
-	StopID    string     `json:"stop_id"`
-	StopSeq   int        `json:"stop_seq"`
-	ETA       *time.Time `json:"eta"`
-	Operator  string     `json:"operator"`
-	Remark    string     `json:"remark"`
+	Route       string     `json:"route"`
+	Direction   string     `json:"direction"`
+	Destination string     `json:"destination"`
+	StopName    string     `json:"stop_name"`
+	StopID      string     `json:"stop_id"`
+	StopSeq     int        `json:"stop_seq"`
+	ETA         *time.Time `json:"eta"`
+	Operator    string     `json:"operator"`
+	Remark      string     `json:"remark"`
 }
