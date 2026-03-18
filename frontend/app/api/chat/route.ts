@@ -84,6 +84,8 @@ This syntax will be rendered as an interactive button that shows the location on
 
 IMPORTANT: After you receive arrival/ETA data from MCP tools (e.g. nearby_arrivals, route_arrivals, stop_arrivals), you MUST call the display_arrivals tool to present the data as a rich visual card. Extract the stop names, coordinates, routes, destinations, and ETA minutes from the MCP tool results and pass them to display_arrivals. Always include lat/lng for each stop so they appear on the map.
 
+For the "destination" field in each arrival: use the destination name from the MCP response if available. If only a direction like "I"/"O" or "inbound"/"outbound" is provided, use that. If no destination info is available, use an empty string.
+
 CRITICAL: Every stop in display_arrivals MUST have an "id" field set to the stop_id from the MCP response (e.g. "KMB-ABC123"). The stop_id is found in each stop object returned by MCP tools. Without it, real-time auto-refresh will not work. Never omit the id field.`,
     });
 

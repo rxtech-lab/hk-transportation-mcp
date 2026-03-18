@@ -9,6 +9,7 @@ interface StopRequest {
 interface MCPArrival {
   route: string;
   direction: string;
+  destination: string;
   stop_id: string;
   eta: string;
   remark?: string;
@@ -88,7 +89,7 @@ export async function POST(req: Request) {
             const key = arrival.route;
             if (!routeMap.has(key)) {
               routeMap.set(key, {
-                destination: arrival.direction,
+                destination: arrival.destination || arrival.direction,
                 etas: [],
               });
             }

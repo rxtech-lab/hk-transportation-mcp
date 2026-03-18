@@ -153,13 +153,14 @@ func (k *KMBClient) FetchETA(ctx context.Context, stopID, route string) ([]model
 			}
 		}
 		arrivals = append(arrivals, models.ETAArrival{
-			Route:     e.Route,
-			Direction: e.Dir,
-			StopID:    stopID,
-			StopSeq:   e.Seq,
-			ETA:       eta,
-			Operator:  opKMB,
-			Remark:    e.RmkEn,
+			Route:       e.Route,
+			Direction:   e.Dir,
+			Destination: e.DestEn,
+			StopID:      stopID,
+			StopSeq:     e.Seq,
+			ETA:         eta,
+			Operator:    opKMB,
+			Remark:      e.RmkEn,
 		})
 	}
 	return arrivals, nil

@@ -97,9 +97,12 @@ export function ArrivalCard({
                     <IconBus size={11} className="text-zinc-400" />
                     {arrival.route}
                   </span>
-                  <span className="text-[12px] text-zinc-500 truncate min-w-0">
-                    → {arrival.destination}
-                  </span>
+                  {arrival.destination &&
+                    !["N/A", "Inbound", "Outbound", "-"].includes(arrival.destination.trim()) && (
+                    <span className="text-[12px] text-zinc-500 truncate min-w-0">
+                      → {arrival.destination}
+                    </span>
+                  )}
                   {/* ETA pills */}
                   <div className="flex gap-1 ml-auto shrink-0">
                     {arrival.etas.map((eta, k) => (

@@ -215,7 +215,7 @@ export function TransportMap({ mapData, userLocation, selectedPin }: TransportMa
           closeOnClick={false}
           onClose={() => setActiveStop(null)}
           focusAfterOpen={false}
-          className="[&_.mapboxgl-popup-content]:!bg-zinc-900 [&_.mapboxgl-popup-content]:!text-white [&_.mapboxgl-popup-content]:!rounded-xl [&_.mapboxgl-popup-content]:!px-3 [&_.mapboxgl-popup-content]:!py-2.5 [&_.mapboxgl-popup-content]:!shadow-xl [&_.mapboxgl-popup-content]:!max-w-[260px] [&_.mapboxgl-popup-tip]:!border-t-zinc-900 [&_.mapboxgl-popup-close-button]:!text-zinc-400 [&_.mapboxgl-popup-close-button]:!text-lg [&_.mapboxgl-popup-close-button]:!right-2 [&_.mapboxgl-popup-close-button]:!top-2 [&_.mapboxgl-popup-close-button]:!outline-none [&_.mapboxgl-popup-close-button:focus]:!outline-none [&_.mapboxgl-popup-close-button]:!w-6 [&_.mapboxgl-popup-close-button]:!h-6 [&_.mapboxgl-popup-close-button]:!rounded-full [&_.mapboxgl-popup-close-button]:!flex [&_.mapboxgl-popup-close-button]:!items-center [&_.mapboxgl-popup-close-button]:!justify-center [&_.mapboxgl-popup-close-button]:!bg-zinc-700/60"
+          className="[&_.mapboxgl-popup-content]:!bg-zinc-900 [&_.mapboxgl-popup-content]:!text-white [&_.mapboxgl-popup-content]:!rounded-xl [&_.mapboxgl-popup-content]:!px-4 [&_.mapboxgl-popup-content]:!py-3 [&_.mapboxgl-popup-content]:!shadow-xl [&_.mapboxgl-popup-content]:!max-w-[320px] [&_.mapboxgl-popup-tip]:!border-t-zinc-900 [&_.mapboxgl-popup-close-button]:!text-zinc-400 [&_.mapboxgl-popup-close-button]:!text-lg [&_.mapboxgl-popup-close-button]:!right-2 [&_.mapboxgl-popup-close-button]:!top-2 [&_.mapboxgl-popup-close-button]:!outline-none [&_.mapboxgl-popup-close-button:focus]:!outline-none [&_.mapboxgl-popup-close-button]:!w-6 [&_.mapboxgl-popup-close-button]:!h-6 [&_.mapboxgl-popup-close-button]:!rounded-full [&_.mapboxgl-popup-close-button]:!flex [&_.mapboxgl-popup-close-button]:!items-center [&_.mapboxgl-popup-close-button]:!justify-center [&_.mapboxgl-popup-close-button]:!bg-zinc-700/60"
         >
           <p className="text-[13px] font-semibold pr-4">{activeStop.name}</p>
           {activeStop.arrivals && activeStop.arrivals.length > 0 ? (
@@ -226,7 +226,7 @@ export function TransportMap({ mapData, userLocation, selectedPin }: TransportMa
                     <IconBus size={10} className="text-zinc-400" />
                     {arrival.route}
                   </span>
-                  <span className="text-[10px] text-zinc-500 truncate max-w-[80px]">
+                  <span className="text-[10px] text-zinc-500 truncate max-w-[100px]">
                     {arrival.destination}
                   </span>
                   <div className="flex gap-0.5 ml-auto">

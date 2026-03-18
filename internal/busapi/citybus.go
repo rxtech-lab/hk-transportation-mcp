@@ -163,13 +163,14 @@ func (c *CitybusClient) FetchETA(ctx context.Context, stopID, route string) ([]m
 			}
 		}
 		arrivals = append(arrivals, models.ETAArrival{
-			Route:     e.Route,
-			Direction: e.Dir,
-			StopID:    stopID,
-			StopSeq:   e.Seq,
-			ETA:       eta,
-			Operator:  opCitybus,
-			Remark:    e.RmkEn,
+			Route:       e.Route,
+			Direction:   e.Dir,
+			Destination: e.DestEn,
+			StopID:      stopID,
+			StopSeq:     e.Seq,
+			ETA:         eta,
+			Operator:    opCitybus,
+			Remark:      e.RmkEn,
 		})
 	}
 	return arrivals, nil

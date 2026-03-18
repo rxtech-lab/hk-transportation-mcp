@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 const arrivalSchema = z.object({
   route: z.string(),
-  destination: z.string(),
+  destination: z.string().describe("The destination name (e.g. '銅鑼灣' or 'Causeway Bay'). Use dest_tc/dest_en from MCP data. Never use 'N/A'."),
   etas: z.array(
     z.object({
       minutes: z.number(),
