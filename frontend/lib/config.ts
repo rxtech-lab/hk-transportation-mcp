@@ -6,3 +6,5 @@ export const AI_GATEWAY_URL =
 export const AI_GATEWAY_API_KEY = process.env.AI_GATEWAY_API_KEY ?? "";
 export const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 export const MCP_ADMIN_KEY = process.env.MCP_ADMIN_KEY ?? "";
+export const KV_REST_API_URL = process.env.KV_REST_API_URL ?? "";
+export const KV_REST_API_TOKEN = process.env.KV_REST_API_TOKEN ?? "";

@@ -14,6 +14,8 @@
     "@ai-sdk/react": "^3.0.118",
     "@tabler/icons-react": "^3.40.0",
     "@tanstack/react-query": "^5.91.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
     "ai": "^6.0.116",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

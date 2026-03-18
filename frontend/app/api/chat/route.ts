@@ -13,6 +13,7 @@ import {
 } from "@/lib/config";
 import { getMCPClient, resetMCPClient } from "@/lib/mcp-client";
 import { displayArrivalsTool } from "@/lib/tools/display-arrivals";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 const openai = createOpenAI({
   baseURL: AI_GATEWAY_URL,
@@ -40,6 +41,18 @@ Return NO for everything else.`,
 
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1";
+    const { success, remaining } = await checkRateLimit(ip);
+    if (!success) {
+      return Response.json(
+        { error: "Rate limit exceeded. You can send up to 200 messages per day." },
+        {
+          status: 429,
+          headers: { "X-RateLimit-Remaining": String(remaining) },
+        },
+      );
+    }
+
     const { messages, latitude, longitude } = await req.json();
 
     const recentMessages = Array.isArray(messages) ? messages.slice(-20) : [];
