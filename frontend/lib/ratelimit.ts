@@ -20,6 +20,10 @@ function getRatelimit(): Ratelimit | null {
   return ratelimit;
 }
 
+/**
+ * Check if the given IP is within the rate limit.
+ * Returns { success: true, remaining: -1 } when rate limiting is disabled (no env vars configured).
+ */
 export async function checkRateLimit(
   ip: string,
 ): Promise<{ success: boolean; remaining: number }> {
