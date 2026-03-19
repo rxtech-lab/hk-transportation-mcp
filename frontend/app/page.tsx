@@ -72,6 +72,23 @@ export default function Home() {
             output: "Arrival card displayed to user.",
           });
         }
+        if (toolCall.toolName === "get_user_location") {
+          geo.request().then((coords) => {
+            if (coords) {
+              addToolOutput({
+                tool: "get_user_location" as never,
+                toolCallId: toolCall.toolCallId,
+                output: JSON.stringify({ latitude: coords.latitude, longitude: coords.longitude }),
+              });
+            } else {
+              addToolOutput({
+                tool: "get_user_location" as never,
+                toolCallId: toolCall.toolCallId,
+                output: JSON.stringify({ error: "Location unavailable. The user may have denied location permission." }),
+              });
+            }
+          });
+        }
       },
     });
 
@@ -130,15 +147,7 @@ export default function Home() {
     if (isLanding) setIsLanding(false);
     // Clear refresh override so next response's data takes over
     setArrivalsOverride(null);
-    sendMessage(
-      { text },
-      {
-        body: {
-          latitude: geo.latitude,
-          longitude: geo.longitude,
-        },
-      }
-    );
+    sendMessage({ text });
   };
 
   const handleClear = () => {
