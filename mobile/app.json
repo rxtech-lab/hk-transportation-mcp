@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "hk-transportation",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,9 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.rxlab.hktransport",
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/ios-icon.png",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "We use your location to find nearby bus stops and show real-time arrivals."
+        "NSLocationWhenInUseUsageDescription": "We use your location to find nearby bus stops and show real-time arrivals.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -24,7 +25,9 @@
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "config": {
         "googleMaps": {
@@ -56,11 +59,18 @@
         {
           "locationWhenInUsePermission": "We use your location to find nearby bus stops and show real-time arrivals."
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "dbeec49c-a9e7-4478-b52e-bb9bfe11a565"
+      }
     }
   }
 }

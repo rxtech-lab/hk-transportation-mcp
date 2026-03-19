@@ -21,11 +21,12 @@ import { ChatMessagesList } from "@/components/chat/ChatMessages";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useArrivalsRefresh } from "@/hooks/useArrivalsRefresh";
+import { useChatSessionStorage } from "@/hooks/useChatSessions";
 import {
-  loadStoredMessages,
-  useChatStorage,
-  clearChatStorage,
-} from "@/hooks/useChatStorage";
+  createSession,
+  loadSessionMessages,
+  updateSessionTitle,
+} from "@/lib/db";
 import { useMapData } from "@/hooks/useMapData";
 import { useI18n } from "@/lib/i18n/i18n-provider";
 import { fetch as expoFetch } from "expo/fetch";
@@ -37,20 +38,26 @@ import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
 export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { initialMessage } = useLocalSearchParams<{
+  const { initialMessage, sessionId: paramSessionId } = useLocalSearchParams<{
     initialMessage?: string;
+    sessionId?: string;
   }>();
   const { setIsTabBarHidden } = use(TabBarContext);
   const { setData: setMapScreenData } = use(MapDataContext);
   const [arrivalsOverride, setArrivalsOverride] =
     useState<DisplayArrivalsInput | null>(null);
   const [selectedPin, setSelectedPin] = useState<LocationPin | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(
+    paramSessionId ?? null,
+  );
   const geo = useGeolocation();
   const { dict } = useI18n();
   const geoRequestedRef = useRef(false);
   const geoRef = useRef(geo);
   geoRef.current = geo;
   const initialMessageSentRef = useRef(false);
+  const titleGeneratedRef = useRef(false);
+  const prevStatusRef = useRef<string>("");
 
   // Hide tab bar on mount, restore on unmount
   useEffect(() => {
@@ -58,9 +65,16 @@ export default function ChatScreen() {
     return () => setIsTabBarHidden(false);
   }, [setIsTabBarHidden]);
 
-  const { messages, sendMessage, status, setMessages, error, addToolOutput } =
-    useChat({
-      id: "hk-transport",
+  const {
+    messages,
+    sendMessage,
+    regenerate,
+    status,
+    setMessages,
+    error,
+    addToolOutput,
+  } = useChat({
+      id: currentSessionId ? `session-${currentSessionId}` : "hk-transport-new",
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
       transport: new DefaultChatTransport({
         api: `${FRONTEND_URL}/api/chat`,
@@ -112,26 +126,80 @@ export default function ChatScreen() {
       },
     });
 
-  useChatStorage(messages);
+  useChatSessionStorage(currentSessionId, messages);
+
+  // Auto-generate title after first assistant response
+  useEffect(() => {
+    if (
+      titleGeneratedRef.current ||
+      !currentSessionId ||
+      messages.length < 2
+    ) {
+      return;
+    }
+    const wasStreaming = prevStatusRef.current === "streaming";
+    prevStatusRef.current = status;
+
+    if (wasStreaming && status === "ready") {
+      titleGeneratedRef.current = true;
+      const titleMessages = messages.slice(0, 4).map((m) => ({
+        role: m.role,
+        content: m.parts
+          .filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .map((p) => p.text)
+          .join(""),
+      }));
+
+      fetch(`${FRONTEND_URL}/api/chat/title`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: titleMessages }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.title) {
+            updateSessionTitle(currentSessionId, data.title);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [status, messages, currentSessionId]);
 
   // Restore stored messages or send initial message
   const restoredRef = useRef(false);
   useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
-    loadStoredMessages().then((stored) => {
+
+    if (initialMessage && paramSessionId) {
+      // New session created by landing page with initial message
+      setCurrentSessionId(paramSessionId);
+      initialMessageSentRef.current = true;
+      if (!geoRequestedRef.current) {
+        geoRequestedRef.current = true;
+        geo.request();
+      }
+      setMessages([
+        {
+          id: `user-${Date.now()}`,
+          role: "user",
+          parts: [{ type: "text", text: initialMessage }],
+        },
+      ]);
+      setTimeout(() => regenerate(), 0);
+    } else if (paramSessionId) {
+      // Loading existing session from history
+      setCurrentSessionId(paramSessionId);
+      const stored = loadSessionMessages(paramSessionId);
       if (stored.length > 0) {
         setMessages(stored);
-      } else if (initialMessage && !initialMessageSentRef.current) {
-        initialMessageSentRef.current = true;
-        if (!geoRequestedRef.current) {
-          geoRequestedRef.current = true;
-          geo.request();
-        }
-        sendMessage({ text: initialMessage });
       }
-    });
-  }, [setMessages, initialMessage, sendMessage, geo]);
+    } else {
+      // New blank session
+      const session = createSession();
+      setCurrentSessionId(session.id);
+    }
+  }, [setMessages, initialMessage, paramSessionId, regenerate, geo]);
 
   const arrivalsFromMessages = useMemo(() => {
     let last: DisplayArrivalsInput | null = null;
@@ -201,16 +269,15 @@ export default function ChatScreen() {
   }, [router]);
 
   const handleClear = useCallback(() => {
+    // Create a new session and reset state
+    const session = createSession();
+    setCurrentSessionId(session.id);
     setMessages([]);
     setArrivalsOverride(null);
-    clearChatStorage();
     geoRequestedRef.current = false;
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace("/");
-    }
-  }, [setMessages, router]);
+    titleGeneratedRef.current = false;
+    prevStatusRef.current = "";
+  }, [setMessages]);
 
   const isLoading = status === "streaming" || status === "submitted";
   const hasMapContent = mapData.stops.length > 0 || mapData.routes.length > 0;
@@ -284,6 +351,7 @@ export default function ChatScreen() {
             onSubmit={handleSend}
             disabled={isLoading}
             placeholder={dict.chat.inputPlaceholder}
+            compact
           />
         </View>
       </KeyboardAvoidingView>

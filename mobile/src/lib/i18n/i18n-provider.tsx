@@ -12,6 +12,9 @@ export interface Dictionary {
     readonly subtitle: string;
     readonly suggestions: readonly string[];
     readonly continueChat: string;
+    readonly greetingMorning: string;
+    readonly greetingAfternoon: string;
+    readonly greetingEvening: string;
   };
   chat: {
     readonly headerTitle: string;
@@ -27,6 +30,17 @@ export interface Dictionary {
   };
   map: {
     readonly title: string;
+  };
+  tabs: {
+    readonly transport: string;
+    readonly settings: string;
+    readonly history: string;
+  };
+  history: {
+    readonly title: string;
+    readonly empty: string;
+    readonly delete: string;
+    readonly untitled: string;
   };
 }
 

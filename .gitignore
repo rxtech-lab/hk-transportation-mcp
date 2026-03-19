@@ -48,3 +48,4 @@ secrets.yaml
 !cmd/server
 !cmd/sync
 !internal/sync
+*.ipa

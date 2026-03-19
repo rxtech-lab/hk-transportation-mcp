@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo, useCallback } from "react";
-import { View, FlatList, StyleSheet, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
+import { View, FlatList, StyleSheet, Animated, Easing, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 import { isToolUIPart, type UIMessage } from "ai";
 import { MessageBubble } from "./MessageBubble";
 import { AssistantMessage } from "./AssistantMessage";
@@ -24,6 +24,65 @@ interface PreparedItem {
   lastArrivalsToolCallId?: string | null;
 }
 
+function TypingIndicator() {
+  const anims = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
+
+  useEffect(() => {
+    const animations = anims.map((anim, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 160),
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 400,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 0,
+            duration: 400,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      )
+    );
+    animations.forEach((a) => a.start());
+    return () => animations.forEach((a) => a.stop());
+  }, [anims]);
+
+  return (
+    <View style={styles.typingRow}>
+      {anims.map((anim, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            styles.typingDot,
+            {
+              opacity: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.3, 1],
+              }),
+              transform: [
+                {
+                  translateY: anim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, -4],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
 export function ChatMessagesList({
   messages,
   onLocationClick,
@@ -35,9 +94,28 @@ export function ChatMessagesList({
 }: ChatMessagesProps) {
   const listRef = useRef<FlatList<PreparedItem>>(null);
   const isNearBottomRef = useRef(true);
+  const isScrollableRef = useRef(false);
+  const layoutHeightRef = useRef(0);
+  const hasScrolledInitialRef = useRef(false);
+
+  const onLayout = useCallback((e: { nativeEvent: { layout: { height: number } } }) => {
+    layoutHeightRef.current = e.nativeEvent.layout.height;
+  }, []);
+
+  const onContentSizeChange = useCallback((_w: number, h: number) => {
+    isScrollableRef.current = h > layoutHeightRef.current;
+    // Scroll to bottom on first content load (e.g. restored session)
+    if (!hasScrolledInitialRef.current && h > layoutHeightRef.current && layoutHeightRef.current > 0) {
+      hasScrolledInitialRef.current = true;
+      setTimeout(() => {
+        listRef.current?.scrollToEnd({ animated: false });
+      }, 50);
+    }
+  }, []);
 
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+    isScrollableRef.current = contentSize.height > layoutMeasurement.height;
     const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
     isNearBottomRef.current = distanceFromBottom < 100;
   }, []);
@@ -117,20 +195,20 @@ export function ChatMessagesList({
     return result;
   }, [messages, isLoading]);
 
-  // Scroll to bottom when new items appear (only if already near bottom)
+  // Scroll to bottom when new items appear (only if scrollable and near bottom)
   useEffect(() => {
-    if (items.length > 0 && isNearBottomRef.current) {
+    if (items.length > 0 && isScrollableRef.current && isNearBottomRef.current) {
       setTimeout(() => {
         listRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
   }, [items.length]);
 
-  // Scroll to bottom during streaming (only if already near bottom)
+  // Scroll to bottom during streaming (only if scrollable and near bottom)
   useEffect(() => {
     if (!isLoading) return;
     const interval = setInterval(() => {
-      if (isNearBottomRef.current) {
+      if (isScrollableRef.current && isNearBottomRef.current) {
         listRef.current?.scrollToEnd({ animated: false });
       }
     }, 150);
@@ -144,13 +222,7 @@ export function ChatMessagesList({
       }
 
       if (item.type === "typing") {
-        return (
-          <View style={styles.typingRow}>
-            <View style={styles.typingDot} />
-            <View style={[styles.typingDot, { opacity: 0.7 }]} />
-            <View style={[styles.typingDot, { opacity: 0.4 }]} />
-          </View>
-        );
+        return <TypingIndicator />;
       }
 
       return (
@@ -183,6 +255,8 @@ export function ChatMessagesList({
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
       onScroll={onScroll}
+      onLayout={onLayout}
+      onContentSizeChange={onContentSizeChange}
       scrollEventThrottle={100}
     />
   );

@@ -1,15 +1,10 @@
 import { View, Text, StyleSheet } from "react-native";
 
 function etaColor(minutes: number) {
-  if (minutes <= 0) return { bg: "rgba(239,68,68,0.15)", text: "#f87171" };
-  if (minutes <= 5) return { bg: "rgba(34,197,94,0.15)", text: "#4ade80" };
-  if (minutes <= 15) return { bg: "rgba(245,158,11,0.15)", text: "#fbbf24" };
-  return { bg: "rgba(113,113,122,0.15)", text: "#a1a1aa" };
-}
-
-function etaLabel(minutes: number): string {
-  if (minutes <= 0) return "Departed";
-  return `${minutes} min`;
+  if (minutes <= 0) return { bg: "rgba(255,69,58,0.16)", text: "#FF453A" };
+  if (minutes <= 3) return { bg: "rgba(48,209,88,0.16)", text: "#30D158" };
+  if (minutes <= 10) return { bg: "rgba(255,214,10,0.16)", text: "#FFD60A" };
+  return { bg: "rgba(142,142,147,0.16)", text: "rgba(235,235,245,0.6)" };
 }
 
 export function EtaPill({
@@ -20,23 +15,47 @@ export function EtaPill({
   remarks?: string;
 }) {
   const colors = etaColor(minutes);
+
+  if (minutes <= 0) {
+    return (
+      <View style={[styles.pill, { backgroundColor: colors.bg }]}>
+        <Text style={[styles.departedText, { color: colors.text }]}>Left</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.pill, { backgroundColor: colors.bg }]}>
-      <Text style={[styles.text, { color: colors.text }]}>
-        {etaLabel(minutes)}
-      </Text>
+      <Text style={[styles.minutes, { color: colors.text }]}>{minutes}</Text>
+      <Text style={[styles.unit, { color: colors.text }]}>min</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   pill: {
-    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "baseline",
+    borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
+    gap: 2,
   },
-  text: {
+  minutes: {
+    fontSize: 17,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: -0.41,
+  },
+  unit: {
     fontSize: 11,
+    fontWeight: "500",
+    letterSpacing: -0.08,
+    opacity: 0.8,
+  },
+  departedText: {
+    fontSize: 12,
     fontWeight: "600",
+    letterSpacing: -0.08,
   },
 });

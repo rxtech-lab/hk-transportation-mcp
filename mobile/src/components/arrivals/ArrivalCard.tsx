@@ -1,4 +1,11 @@
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { EtaPill } from "./EtaPill";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
@@ -28,39 +35,53 @@ export function ArrivalCard({
 }) {
   return (
     <View style={[styles.card, stale && styles.stale]}>
+      {/* Header: title + refresh */}
       {(data.title || onRefresh) && (
         <View style={styles.header}>
-          {data.title ? (
-            <Text style={styles.title}>{data.title}</Text>
-          ) : null}
+          <View style={styles.headerTop}>
+            {data.title ? (
+              <Text style={styles.title} numberOfLines={2}>
+                {data.title}
+              </Text>
+            ) : null}
+          </View>
           {onRefresh && (
             <View style={styles.refreshRow}>
               {lastRefreshedAt ? (
                 <Text style={styles.refreshTime}>
-                  {formatTime(lastRefreshedAt)}
+                  Updated {formatTime(lastRefreshedAt)}
                 </Text>
               ) : null}
               <Pressable
                 onPress={onRefresh}
                 disabled={isRefreshing}
-                style={styles.refreshButton}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.refreshButton,
+                  pressed && styles.refreshButtonPressed,
+                ]}
               >
                 {isRefreshing ? (
-                  <ActivityIndicator size={13} color="#a1a1aa" />
+                  <ActivityIndicator size={12} color="#007AFF" />
                 ) : (
-                  <Ionicons name="refresh" size={13} color="#a1a1aa" />
+                  <Ionicons name="refresh" size={12} color="#007AFF" />
                 )}
+                <Text style={styles.refreshLabel}>
+                  {isRefreshing ? "Updating" : "Refresh"}
+                </Text>
               </Pressable>
             </View>
           )}
         </View>
       )}
 
+      {/* Stop sections */}
       {data.stops.map((stop, i) => (
         <View
           key={i}
-          style={[styles.stopRow, i > 0 && styles.stopBorder]}
+          style={[styles.stopSection, i > 0 && styles.stopSeparator]}
         >
+          {/* Stop name */}
           <Pressable
             onPress={() =>
               onLocationClick?.({
@@ -69,42 +90,67 @@ export function ArrivalCard({
                 lng: stop.lng,
               })
             }
-            style={styles.stopNameRow}
+            style={({ pressed }) => [
+              styles.stopNameRow,
+              pressed && styles.stopNamePressed,
+            ]}
           >
-            <Ionicons name="location" size={13} color="#60a5fa" />
-            <Text style={styles.stopName}>{stop.name}</Text>
+            <View style={styles.stopIcon}>
+              <Ionicons name="location" size={12} color="#007AFF" />
+            </View>
+            <Text style={styles.stopName} numberOfLines={1}>
+              {stop.name}
+            </Text>
+            <Ionicons
+              name="chevron-forward"
+              size={12}
+              color="rgba(235,235,245,0.18)"
+            />
           </Pressable>
 
-          {stop.arrivals.map((arrival, j) => (
-            <View key={j} style={styles.arrivalRow}>
-              <View style={styles.routeBadge}>
-                <Ionicons name="bus" size={11} color="#a1a1aa" />
-                <Text style={styles.routeText}>{arrival.route}</Text>
-              </View>
-              {arrival.destination &&
-                !["N/A", "Inbound", "Outbound", "-"].includes(
-                  arrival.destination.trim()
-                ) && (
-                  <Text style={styles.destination} numberOfLines={1}>
-                    → {arrival.destination}
-                  </Text>
-                )}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.etaScroll}
-                contentContainerStyle={styles.etaRow}
+          {/* Arrivals for this stop */}
+          {stop.arrivals.map((arrival, j) => {
+            const showDest =
+              arrival.destination &&
+              !["N/A", "Inbound", "Outbound", "-"].includes(
+                arrival.destination.trim(),
+              );
+
+            return (
+              <View
+                key={j}
+                style={[styles.arrivalItem, j > 0 && styles.arrivalSeparator]}
               >
-                {arrival.etas.map((eta, k) => (
-                  <EtaPill
-                    key={k}
-                    minutes={eta.minutes}
-                    remarks={eta.remarks}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-          ))}
+                {/* Route + destination row */}
+                <View style={styles.routeRow}>
+                  <View style={styles.routeBadge}>
+                    <Ionicons name="bus" size={10} color="#fff" />
+                    <Text style={styles.routeNumber}>{arrival.route}</Text>
+                  </View>
+                  {showDest && (
+                    <Text style={styles.destination} numberOfLines={1}>
+                      {arrival.destination}
+                    </Text>
+                  )}
+                </View>
+
+                {/* ETA pills */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.etaContainer}
+                >
+                  {arrival.etas.map((eta, k) => (
+                    <EtaPill
+                      key={k}
+                      minutes={eta.minutes}
+                      remarks={eta.remarks}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            );
+          })}
         </View>
       ))}
     </View>
@@ -114,67 +160,109 @@ export function ArrivalCard({
 const styles = StyleSheet.create({
   card: {
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    backgroundColor: "rgba(255,255,255,0.02)",
+    backgroundColor: "rgba(30,30,30,0.95)",
     overflow: "hidden",
   },
   stale: {
-    opacity: 0.45,
+    opacity: 0.4,
   },
+
+  /* ── Header ──────────────────────────── */
   header: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(84,84,88,0.36)",
+    gap: 8,
+  },
+  headerTop: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.06)",
-    backgroundColor: "rgba(255,255,255,0.02)",
   },
   title: {
-    fontSize: 14,
+    flex: 1,
+    fontSize: 17,
     fontWeight: "600",
     color: "#fff",
+    letterSpacing: -0.41,
   },
   refreshRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginLeft: "auto",
+    justifyContent: "space-between",
   },
   refreshTime: {
-    fontSize: 11,
-    color: "#71717a",
+    fontSize: 12,
+    color: "rgba(235,235,245,0.3)",
+    letterSpacing: -0.08,
   },
   refreshButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,122,255,0.12)",
   },
-  stopRow: {
+  refreshButtonPressed: {
+    backgroundColor: "rgba(0,122,255,0.24)",
+  },
+  refreshLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#007AFF",
+    letterSpacing: -0.08,
+  },
+
+  /* ── Stop section ────────────────────── */
+  stopSection: {
+    paddingTop: 12,
+    paddingBottom: 4,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
   },
-  stopBorder: {
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.04)",
+  stopSeparator: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(84,84,88,0.36)",
   },
   stopNameRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    marginBottom: 10,
+    paddingVertical: 2,
+  },
+  stopNamePressed: {
+    opacity: 0.6,
+  },
+  stopIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: "rgba(0,122,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   stopName: {
-    fontSize: 13,
-    color: "#60a5fa",
-    textDecorationLine: "underline",
-    textDecorationColor: "rgba(96,165,250,0.4)",
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#007AFF",
+    letterSpacing: -0.16,
   },
-  arrivalRow: {
+
+  /* ── Arrival item ────────────────────── */
+  arrivalItem: {
+    paddingBottom: 10,
+    gap: 8,
+  },
+  arrivalSeparator: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(84,84,88,0.2)",
+    paddingTop: 10,
+  },
+  routeRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -183,27 +271,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "#007AFF",
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  routeText: {
-    fontSize: 12,
-    fontWeight: "600",
+  routeNumber: {
+    fontSize: 13,
+    fontWeight: "700",
     color: "#fff",
+    letterSpacing: -0.08,
   },
   destination: {
-    fontSize: 12,
-    color: "#71717a",
-    flexShrink: 1,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "400",
+    color: "rgba(235,235,245,0.6)",
+    letterSpacing: -0.16,
   },
-  etaScroll: {
-    flexShrink: 1,
-    marginLeft: "auto",
-  },
-  etaRow: {
+
+  /* ── ETA row ─────────────────────────── */
+  etaContainer: {
     flexDirection: "row",
-    gap: 4,
+    gap: 6,
   },
 });

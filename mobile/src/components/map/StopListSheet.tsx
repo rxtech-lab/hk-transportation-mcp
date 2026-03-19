@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, FlatList } from "react-native";
-import { TrueSheet } from "@lodev09/react-native-true-sheet";
+import { useCallback, useMemo } from "react";
+import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import BottomSheet, { BottomSheetFlatList } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { EtaPill } from "@/components/arrivals/EtaPill";
 import type { MapStop } from "@/lib/types";
@@ -63,48 +63,54 @@ function StopRow({
 }
 
 export function StopListSheet({ stops, onStopPress }: StopListSheetProps) {
-  const sheetRef = useRef<TrueSheet>(null);
+  const snapPoints = useMemo(() => ["25%", "50%", "90%"], []);
 
-  useEffect(() => {
-    if (stops.length > 0) {
-      sheetRef.current?.present();
-    }
-  }, [stops.length]);
+  const renderItem = useCallback(
+    ({ item }: { item: MapStop }) => (
+      <StopRow stop={item} onPress={() => onStopPress?.(item)} />
+    ),
+    [onStopPress]
+  );
 
   if (stops.length === 0) return null;
 
   return (
-    <TrueSheet
-      ref={sheetRef}
-      detents={["auto", 0.5, 1]}
-      cornerRadius={16}
-      backgroundColor="#18181b"
-      grabber
-      scrollable
+    <BottomSheet
+      snapPoints={snapPoints}
+      index={0}
+      enablePanDownToClose={false}
+      backgroundStyle={styles.sheetBackground}
+      handleIndicatorStyle={styles.handleIndicator}
     >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
           {stops.length} {stops.length === 1 ? "Stop" : "Stops"}
         </Text>
       </View>
-      <FlatList
-        nestedScrollEnabled
+      <BottomSheetFlatList
         data={stops}
         keyExtractor={(item: MapStop, i: number) => `${item.lat}-${item.lng}-${i}`}
-        renderItem={({ item }) => (
-          <StopRow stop={item} onPress={() => onStopPress?.(item)} />
-        )}
+        renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
-    </TrueSheet>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
+  sheetBackground: {
+    backgroundColor: "#18181b",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  handleIndicator: {
+    backgroundColor: "rgba(255,255,255,0.3)",
+    width: 36,
+  },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 4,
     paddingBottom: 8,
   },
   headerTitle: {
