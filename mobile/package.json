@@ -5,14 +5,19 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "build:ios:dev": "eas build --platform ios --profile development --local",
+    "build:android:dev": "eas build --platform android --profile development --local",
+    "build:ios:prod": "eas build --platform ios --profile production --local",
+    "build:android:prod": "eas build --platform android --profile production --local"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.118",
     "@gorhom/bottom-sheet": "^5.2.8",
+    "@lodev09/react-native-true-sheet": "^3.9.9",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/elements": "^2.9.10",
@@ -21,6 +26,7 @@
     "ai": "^6.0.116",
     "expo": "~55.0.8",
     "expo-constants": "~55.0.9",
+    "expo-dev-client": "^55.0.18",
     "expo-device": "~55.0.10",
     "expo-font": "~55.0.4",
     "expo-glass-effect": "~55.0.8",

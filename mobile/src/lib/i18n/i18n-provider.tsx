@@ -11,6 +11,7 @@ export interface Dictionary {
     readonly title: string;
     readonly subtitle: string;
     readonly suggestions: readonly string[];
+    readonly continueChat: string;
   };
   chat: {
     readonly headerTitle: string;

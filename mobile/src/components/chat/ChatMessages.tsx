@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo, useCallback } from "react";
-import { View, FlatList, StyleSheet } from "react-native";
+import { View, FlatList, StyleSheet, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 import { isToolUIPart, type UIMessage } from "ai";
 import { MessageBubble } from "./MessageBubble";
 import { AssistantMessage } from "./AssistantMessage";
@@ -34,6 +34,13 @@ export function ChatMessagesList({
   isRefreshing,
 }: ChatMessagesProps) {
   const listRef = useRef<FlatList<PreparedItem>>(null);
+  const isNearBottomRef = useRef(true);
+
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+    const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
+    isNearBottomRef.current = distanceFromBottom < 100;
+  }, []);
 
   const items = useMemo(() => {
     const result: PreparedItem[] = [];
@@ -110,20 +117,22 @@ export function ChatMessagesList({
     return result;
   }, [messages, isLoading]);
 
-  // Scroll to bottom when new items appear
+  // Scroll to bottom when new items appear (only if already near bottom)
   useEffect(() => {
-    if (items.length > 0) {
+    if (items.length > 0 && isNearBottomRef.current) {
       setTimeout(() => {
         listRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
   }, [items.length]);
 
-  // Scroll to bottom during streaming as content grows
+  // Scroll to bottom during streaming (only if already near bottom)
   useEffect(() => {
     if (!isLoading) return;
     const interval = setInterval(() => {
-      listRef.current?.scrollToEnd({ animated: false });
+      if (isNearBottomRef.current) {
+        listRef.current?.scrollToEnd({ animated: false });
+      }
     }, 150);
     return () => clearInterval(interval);
   }, [isLoading]);
@@ -170,8 +179,11 @@ export function ChatMessagesList({
       keyExtractor={(item) => item.key}
       style={styles.container}
       contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
+      onScroll={onScroll}
+      scrollEventThrottle={100}
     />
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useImperativeHandle, forwardRef } from "react";
 import { Platform, StyleSheet, View, Text } from "react-native";
 import MapView, {
   Marker,
@@ -17,12 +17,13 @@ interface TransportMapProps {
   selectedPin?: LocationPin | null;
 }
 
-export function TransportMap({
-  mapData,
-  userLocation,
-  selectedPin,
-}: TransportMapProps) {
+export const TransportMap = forwardRef<MapView, TransportMapProps>(function TransportMap(
+  { mapData, userLocation, selectedPin },
+  ref
+) {
   const mapRef = useRef<MapView>(null);
+
+  useImperativeHandle(ref, () => mapRef.current!, []);
 
   // Fit to coordinates when stops change
   useEffect(() => {
@@ -50,7 +51,7 @@ export function TransportMap({
     }
 
     mapRef.current.fitToCoordinates(allCoords, {
-      edgePadding: { top: 80, right: 60, bottom: 80, left: 60 },
+      edgePadding: { top: 80, right: 60, bottom: 260, left: 60 },
       animated: true,
     });
   }, [mapData]);
@@ -170,7 +171,7 @@ export function TransportMap({
       )}
     </MapView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   callout: {

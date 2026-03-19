@@ -3,6 +3,7 @@ export default {
     title: "香港交通",
     subtitle: "查询巴士路线、附近站点及实时到站时间",
     suggestions: ["附近巴士站", "968号线往元朗", "101号线时刻表"],
+    continueChat: "继续上次对话",
   },
   chat: {
     headerTitle: "香港交通",

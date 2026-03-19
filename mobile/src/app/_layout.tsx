@@ -39,7 +39,7 @@ export default function RootLayout() {
           <ThemeProvider value={DarkTheme}>
             <TabBarContext value={{ setIsTabBarHidden }}>
               <NativeTabs hidden={isTabBarHidden}>
-                <NativeTabs.Trigger name="index">
+                <NativeTabs.Trigger name="(transport)">
                   <NativeTabs.Trigger.Label>Transport</NativeTabs.Trigger.Label>
                   <NativeTabs.Trigger.Icon sf="bus.fill" md="directions_bus" />
                 </NativeTabs.Trigger>

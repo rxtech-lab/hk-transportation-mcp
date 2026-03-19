@@ -3,6 +3,7 @@ export default {
     title: "HK Transportation",
     subtitle: "Ask about bus routes, nearby stops, and real-time arrival times",
     suggestions: ["Buses near me", "Route 968 to Yuen Long", "Route 101 schedule"],
+    continueChat: "Continue previous chat",
   },
   chat: {
     headerTitle: "HK Transport",
