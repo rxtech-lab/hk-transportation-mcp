@@ -1,0 +1,77 @@
+name: Mobile Release
+
+on:
+  release:
+    types:
+      - created
+  push:
+
+jobs:
+  ios:
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+      - name: Install dependencies
+        run: bun install
+      - name: Set version from release tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Setting version to $VERSION"
+          cat <<< "$(jq --arg v "$VERSION" '.expo.version = $v' app.json)" > app.json
+      - name: Build iOS
+        run: eas build --platform ios --profile production --local --non-interactive --output ./build-ios.ipa
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Submit to App Store
+        if: github.event_name != 'push'
+        run: eas submit --platform ios --path ./build-ios.ipa --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+  android:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+      - name: Install dependencies
+        run: bun install
+      - name: Set version from release tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Setting version to $VERSION"
+          cat <<< "$(jq --arg v "$VERSION" '.expo.version = $v' app.json)" > app.json
+      - name: Build Android
+        run: eas build --platform android --profile production --local --non-interactive --output ./build-android.aab
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Submit to Google Play
+        if: github.event_name != 'push'
+        run: eas submit --platform android --path ./build-android.aab --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

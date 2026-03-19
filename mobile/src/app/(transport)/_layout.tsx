@@ -1,10 +1,12 @@
 import { useState, useMemo } from "react";
 import { Stack } from "expo-router";
 import { useI18n } from "@/lib/i18n/i18n-provider";
+import { useTheme } from "@/hooks/use-theme";
 import { MapDataContext, type MapScreenData } from "./_ctx";
 
 export default function TransportLayout() {
   const { dict } = useI18n();
+  const theme = useTheme();
   const [data, setData] = useState<MapScreenData>({
     mapData: { stops: [], routes: [] },
     userLocation: null,
@@ -17,10 +19,10 @@ export default function TransportLayout() {
     <MapDataContext value={ctxValue}>
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: "#09090b" },
-          headerTintColor: "#fff",
+          headerStyle: { backgroundColor: theme.headerBackground },
+          headerTintColor: theme.headerTint,
           headerTitleStyle: { fontWeight: "600" },
-          contentStyle: { backgroundColor: "#09090b" },
+          contentStyle: { backgroundColor: theme.backgroundSecondary },
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -30,7 +32,7 @@ export default function TransportLayout() {
             title: dict.chat.headerTitle,
             headerShadowVisible: false,
             headerTransparent: true,
-            headerBlurEffect: "dark",
+            headerBlurEffect: theme.headerBlurEffect,
           }}
         />
         <Stack.Screen

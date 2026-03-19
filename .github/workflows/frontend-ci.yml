@@ -1,0 +1,29 @@
+name: Frontend CI
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install
+      - name: Lint
+        run: bun run lint
+      - name: Build
+        run: bun run build
+        env:
+          MCP_URL: http://localhost:3000/mcp
+          AI_MODEL: test-model
+          AI_GATEWAY_URL: https://example.com
+          AI_GATEWAY_API_KEY: dummy
+          NEXT_PUBLIC_MAPBOX_TOKEN: dummy
+          MCP_ADMIN_KEY: dummy
+          KV_REST_API_URL: https://example.com
+          KV_REST_API_TOKEN: dummy

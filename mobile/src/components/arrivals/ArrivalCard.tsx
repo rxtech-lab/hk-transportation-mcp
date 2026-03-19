@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { EtaPill } from "./EtaPill";
+import { useTheme } from "@/hooks/use-theme";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
 
 function formatTime(timestamp: number): string {
@@ -33,14 +34,16 @@ export function ArrivalCard({
   onRefresh?: () => void;
   isRefreshing?: boolean;
 }) {
+  const theme = useTheme();
+
   return (
-    <View style={[styles.card, stale && styles.stale]}>
+    <View style={[styles.card, { backgroundColor: theme.cardBackground }, stale && styles.stale]}>
       {/* Header: title + refresh */}
       {(data.title || onRefresh) && (
-        <View style={styles.header}>
+        <View style={[styles.header, { borderBottomColor: theme.separator }]}>
           <View style={styles.headerTop}>
             {data.title ? (
-              <Text style={styles.title} numberOfLines={2}>
+              <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>
                 {data.title}
               </Text>
             ) : null}
@@ -48,7 +51,7 @@ export function ArrivalCard({
           {onRefresh && (
             <View style={styles.refreshRow}>
               {lastRefreshedAt ? (
-                <Text style={styles.refreshTime}>
+                <Text style={[styles.refreshTime, { color: theme.chevronColor }]}>
                   Updated {formatTime(lastRefreshedAt)}
                 </Text>
               ) : null}
@@ -79,7 +82,7 @@ export function ArrivalCard({
       {data.stops.map((stop, i) => (
         <View
           key={i}
-          style={[styles.stopSection, i > 0 && styles.stopSeparator]}
+          style={[styles.stopSection, i > 0 && [styles.stopSeparator, { borderTopColor: theme.separator }]]}
         >
           {/* Stop name */}
           <Pressable
@@ -104,7 +107,7 @@ export function ArrivalCard({
             <Ionicons
               name="chevron-forward"
               size={12}
-              color="rgba(235,235,245,0.18)"
+              color={theme.chevronColor}
             />
           </Pressable>
 
@@ -128,7 +131,7 @@ export function ArrivalCard({
                     <Text style={styles.routeNumber}>{arrival.route}</Text>
                   </View>
                   {showDest && (
-                    <Text style={styles.destination} numberOfLines={1}>
+                    <Text style={[styles.destination, { color: theme.textSecondary }]} numberOfLines={1}>
                       {arrival.destination}
                     </Text>
                   )}
@@ -160,7 +163,6 @@ export function ArrivalCard({
 const styles = StyleSheet.create({
   card: {
     borderRadius: 16,
-    backgroundColor: "rgba(30,30,30,0.95)",
     overflow: "hidden",
   },
   stale: {
@@ -173,7 +175,6 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(84,84,88,0.36)",
     gap: 8,
   },
   headerTop: {
@@ -184,7 +185,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 17,
     fontWeight: "600",
-    color: "#fff",
     letterSpacing: -0.41,
   },
   refreshRow: {
@@ -194,7 +194,6 @@ const styles = StyleSheet.create({
   },
   refreshTime: {
     fontSize: 12,
-    color: "rgba(235,235,245,0.3)",
     letterSpacing: -0.08,
   },
   refreshButton: {
@@ -224,7 +223,6 @@ const styles = StyleSheet.create({
   },
   stopSeparator: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(84,84,88,0.36)",
   },
   stopNameRow: {
     flexDirection: "row",
@@ -286,7 +284,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: "400",
-    color: "rgba(235,235,245,0.6)",
     letterSpacing: -0.16,
   },
 

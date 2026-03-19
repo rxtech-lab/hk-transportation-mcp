@@ -19,6 +19,7 @@ import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 
 import { ChatMessagesList } from "@/components/chat/ChatMessages";
 import { ChatInput } from "@/components/chat/ChatInput";
+import { useTheme } from "@/hooks/use-theme";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useArrivalsRefresh } from "@/hooks/useArrivalsRefresh";
 import { useChatSessionStorage } from "@/hooks/useChatSessions";
@@ -52,6 +53,7 @@ export default function ChatScreen() {
   );
   const geo = useGeolocation();
   const { dict } = useI18n();
+  const theme = useTheme();
   const geoRequestedRef = useRef(false);
   const geoRef = useRef(geo);
   geoRef.current = geo;
@@ -288,18 +290,18 @@ export default function ChatScreen() {
         options={{
           headerLeft: () => (
             <Pressable onPress={handleBack} style={styles.headerButton}>
-              <Ionicons name="chevron-back" size={22} color="#fff" />
+              <Ionicons name="chevron-back" size={22} color={theme.headerTint} />
             </Pressable>
           ),
           headerRight: () => (
             <Pressable onPress={handleClear} style={styles.headerButton}>
-              <Ionicons name="add" size={22} color="#a1a1aa" />
+              <Ionicons name="add" size={22} color={theme.textSecondary} />
             </Pressable>
           ),
         }}
       />
       <KeyboardAvoidingView
-        style={styles.root}
+        style={[styles.root, { backgroundColor: theme.backgroundSecondary }]}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={90}
       >
@@ -324,10 +326,10 @@ export default function ChatScreen() {
         )}
 
         {/* Map button + Input */}
-        <View style={[styles.inputArea, { paddingBottom: insets.bottom + 4 }]}>
-          <Pressable onPress={handleOpenMap} style={styles.mapButton}>
+        <View style={[styles.inputArea, { paddingBottom: insets.bottom + 4, borderTopColor: theme.separatorLight, backgroundColor: theme.backgroundSecondary }]}>
+          <Pressable onPress={handleOpenMap} style={[styles.mapButton, { borderBottomColor: theme.separatorLight }]}>
             <Ionicons name="map" size={18} color="#60a5fa" />
-            <Text style={styles.mapButtonText}>
+            <Text style={[styles.mapButtonText, { color: theme.textSecondary }]}>
               {hasMapContent
                 ? `${mapData.stops.length} ${
                     mapData.stops.length !== 1 ? dict.chat.stops : dict.chat.stop
@@ -362,7 +364,6 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#09090b",
   },
   headerButton: {
     width: 32,
@@ -373,8 +374,6 @@ const styles = StyleSheet.create({
   },
   inputArea: {
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.06)",
-    backgroundColor: "#09090b",
   },
   mapButton: {
     flexDirection: "row",
@@ -383,13 +382,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.06)",
   },
   mapButtonText: {
     flex: 1,
     fontSize: 13,
     fontWeight: "500",
-    color: "#d4d4d8",
   },
   mapButtonBadge: {
     backgroundColor: "#3b82f6",

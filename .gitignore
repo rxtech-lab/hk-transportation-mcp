@@ -49,3 +49,6 @@ secrets.yaml
 !cmd/sync
 !internal/sync
 *.ipa
+*.apk
+*.aab
+google-service-account.json

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, startTransition, type ReactNode } from "react";
 import enUS from "./dictionaries/en-US";
 import zhHK from "./dictionaries/zh-HK";
 import zhTW from "./dictionaries/zh-TW";
@@ -71,12 +71,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY) as Locale | null;
-    if (stored && dictionaries[stored]) {
-      setLocaleState(stored);
-    } else {
-      setLocaleState(resolveLocale(navigator.language));
-    }
-    setMounted(true);
+    startTransition(() => {
+      if (stored && dictionaries[stored]) {
+        setLocaleState(stored);
+      } else {
+        setLocaleState(resolveLocale(navigator.language));
+      }
+      setMounted(true);
+    });
   }, []);
 
   useEffect(() => {

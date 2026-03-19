@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import BottomSheet, { BottomSheetFlatList } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { EtaPill } from "@/components/arrivals/EtaPill";
+import { useTheme } from "@/hooks/use-theme";
 import type { MapStop } from "@/lib/types";
 
 interface StopListSheetProps {
@@ -18,12 +19,13 @@ function StopRow({
   onPress?: () => void;
 }) {
   const hasArrivals = stop.arrivals && stop.arrivals.length > 0;
+  const theme = useTheme();
 
   return (
     <Pressable onPress={onPress} style={styles.stopRow}>
       <View style={styles.stopHeader}>
         <Ionicons name="location" size={16} color="#60a5fa" />
-        <Text style={styles.stopName} numberOfLines={1}>
+        <Text style={[styles.stopName, { color: theme.text }]} numberOfLines={1}>
           {stop.name}
         </Text>
       </View>
@@ -31,9 +33,9 @@ function StopRow({
       {hasArrivals ? (
         stop.arrivals!.map((arrival, i) => (
           <View key={i} style={styles.arrivalRow}>
-            <View style={styles.routeBadge}>
-              <Ionicons name="bus" size={11} color="#a1a1aa" />
-              <Text style={styles.routeText}>{arrival.route}</Text>
+            <View style={[styles.routeBadge, { backgroundColor: theme.routeBadgeBg }]}>
+              <Ionicons name="bus" size={11} color={theme.textTertiary} />
+              <Text style={[styles.routeText, { color: theme.routeBadgeText }]}>{arrival.route}</Text>
             </View>
             {arrival.destination &&
               !["N/A", "Inbound", "Outbound", "-"].includes(
@@ -64,6 +66,7 @@ function StopRow({
 
 export function StopListSheet({ stops, onStopPress }: StopListSheetProps) {
   const snapPoints = useMemo(() => ["25%", "50%", "90%"], []);
+  const theme = useTheme();
 
   const renderItem = useCallback(
     ({ item }: { item: MapStop }) => (
@@ -79,11 +82,11 @@ export function StopListSheet({ stops, onStopPress }: StopListSheetProps) {
       snapPoints={snapPoints}
       index={0}
       enablePanDownToClose={false}
-      backgroundStyle={styles.sheetBackground}
-      handleIndicatorStyle={styles.handleIndicator}
+      backgroundStyle={[styles.sheetBackground, { backgroundColor: theme.sheetBackground }]}
+      handleIndicatorStyle={[styles.handleIndicator, { backgroundColor: theme.sheetHandle }]}
     >
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
           {stops.length} {stops.length === 1 ? "Stop" : "Stops"}
         </Text>
       </View>
@@ -92,7 +95,7 @@ export function StopListSheet({ stops, onStopPress }: StopListSheetProps) {
         keyExtractor={(item: MapStop, i: number) => `${item.lat}-${item.lng}-${i}`}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: theme.separatorLight }]} />}
       />
     </BottomSheet>
   );
@@ -100,12 +103,10 @@ export function StopListSheet({ stops, onStopPress }: StopListSheetProps) {
 
 const styles = StyleSheet.create({
   sheetBackground: {
-    backgroundColor: "#18181b",
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   },
   handleIndicator: {
-    backgroundColor: "rgba(255,255,255,0.3)",
     width: 36,
   },
   header: {
@@ -116,7 +117,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#fff",
   },
   listContent: {
     paddingHorizontal: 16,
@@ -124,7 +124,6 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 1,
-    backgroundColor: "rgba(255,255,255,0.06)",
     marginVertical: 6,
   },
   stopRow: {
@@ -139,7 +138,6 @@ const styles = StyleSheet.create({
   stopName: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#fff",
     flex: 1,
   },
   arrivalRow: {
@@ -153,7 +151,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "rgba(255,255,255,0.08)",
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -161,7 +158,6 @@ const styles = StyleSheet.create({
   routeText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#fff",
   },
   destination: {
     fontSize: 11,
