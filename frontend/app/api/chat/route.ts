@@ -6,14 +6,10 @@ import {
   stepCountIs,
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
-import {
-  AI_GATEWAY_API_KEY,
-  AI_GATEWAY_URL,
-  AI_MODEL,
-} from "@/lib/config";
+import { AI_GATEWAY_API_KEY, AI_GATEWAY_URL, AI_MODEL } from "@/lib/config";
 import { getMCPClient, resetMCPClient } from "@/lib/mcp-client";
 import { displayArrivalsTool } from "@/lib/tools/display-arrivals";
-import { checkRateLimit } from "@/lib/ratelimit";
+import { getUserLocationTool } from "@/lib/tools/get-user-location";
 
 const openai = createOpenAI({
   baseURL: AI_GATEWAY_URL,
@@ -27,13 +23,16 @@ async function isHongKongTransportationQuery(
     model: AI_MODEL,
     output: Output.choice({ options: ["YES", "NO"] }),
     messages: modelMessages,
-    system: `You are a strict classifier.
+    system: `You are a strict classifier for a Hong Kong transportation app.
 
-Determine whether the user is asking about transportation in Hong Kong.
+Determine whether the user's message is related to transportation or could reasonably be a transportation query in the context of this app.
 Return exactly one word: YES or NO.
 
-Return YES only when the user intent is about Hong Kong transportation (for example: bus routes, stops, arrivals, fares, directions, MTR, ferries, trams, minibuses, transit planning in Hong Kong).
-Return NO for everything else.`,
+Return YES for:
+- Any mention of buses, routes, stops, arrivals, fares, directions, MTR, ferries, trams, minibuses, transit planning
+- Generic transportation queries like "buses near me", "nearby stops", "how do I get to X"
+- Greetings or follow-up messages in a conversation (e.g. "hello", "thanks", "yes")
+Return NO only for clearly unrelated topics (e.g. cooking recipes, stock prices, coding help).`,
   });
 
   return classification === "YES";
@@ -41,19 +40,18 @@ Return NO for everything else.`,
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1";
-    const { success, remaining } = await checkRateLimit(ip);
-    if (!success) {
-      return Response.json(
-        { error: "Rate limit exceeded. You can send up to 200 messages per day." },
-        {
-          status: 429,
-          headers: { "X-RateLimit-Remaining": String(remaining) },
-        },
-      );
-    }
-
-    const { messages, latitude, longitude } = await req.json();
+    const body = await req.json();
+    console.log("[chat/route] request body keys:", Object.keys(body));
+    console.log(
+      "[chat/route] messages type:",
+      typeof body.messages,
+      "isArray:",
+      Array.isArray(body.messages),
+      "length:",
+      body.messages?.length,
+    );
+    console.log("[chat/route] full body:", JSON.stringify(body).slice(0, 500));
+    const { messages } = body;
 
     const recentMessages = Array.isArray(messages) ? messages.slice(-20) : [];
     const modelMessages = await convertToModelMessages(recentMessages);
@@ -72,19 +70,14 @@ export async function POST(req: Request) {
     const mcpClient = await getMCPClient();
     const tools = await mcpClient.tools();
 
-    const locationInfo =
-      latitude && longitude
-        ? `User's current location: ${latitude}, ${longitude}`
-        : "User's location is unknown.";
-
     const result = streamText({
       model: AI_MODEL,
-      tools: { ...tools, display_arrivals: displayArrivalsTool },
+      tools: { ...tools, display_arrivals: displayArrivalsTool, get_user_location: getUserLocationTool },
       messages: modelMessages,
       stopWhen: stepCountIs(20),
       system: `You are an HK bus transportation assistant. Help users find bus routes, nearby stops, and arrival times in Hong Kong.
 
-${locationInfo}
+When you need the user's location (e.g. for nearby stops or location-based queries), call the get_user_location tool to retrieve their GPS coordinates. Do not assume the user's location — always request it via the tool when needed.
 
 IMPORTANT: When mentioning any location, bus stop, or place with known coordinates, you MUST use this special syntax:
 📍[Location Name](latitude,longitude)

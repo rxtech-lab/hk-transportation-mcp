@@ -1,0 +1,144 @@
+import { useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+
+import {
+  LandingHeader,
+  SuggestionChips,
+} from "@/components/landing/LandingView";
+import { ChatInput } from "@/components/chat/ChatInput";
+import { createSession, listSessions, migrateLegacyData } from "@/lib/db";
+import { useI18n } from "@/lib/i18n/i18n-provider";
+
+export default function LandingScreen() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { dict } = useI18n();
+  const [hasSession, setHasSession] = useState(false);
+  const [latestSessionId, setLatestSessionId] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      migrateLegacyData().then(() => {
+        const sessions = listSessions();
+        setHasSession(sessions.length > 0);
+        setLatestSessionId(sessions.length > 0 ? sessions[0].id : null);
+      });
+    }, []),
+  );
+
+  const handleSend = useCallback(
+    (text: string) => {
+      const session = createSession();
+      router.push({
+        pathname: "/(transport)/chat",
+        params: { initialMessage: text, sessionId: session.id },
+      });
+    },
+    [router],
+  );
+
+  const handleContinue = useCallback(() => {
+    if (latestSessionId) {
+      router.push({
+        pathname: "/(transport)/chat",
+        params: { sessionId: latestSessionId },
+      });
+    }
+  }, [router, latestSessionId]);
+
+  return (
+    <KeyboardAvoidingView
+      style={[styles.root, { paddingTop: insets.top + 16 }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
+    >
+      <View style={styles.content}>
+        <LandingHeader />
+
+        {hasSession && (
+          <Pressable
+            onPress={handleContinue}
+            style={({ pressed }) => [
+              styles.continueRow,
+              pressed && styles.continueRowPressed,
+            ]}
+          >
+            <View style={styles.continueIconWrap}>
+              <Ionicons name="chatbubbles" size={16} color="#007AFF" />
+            </View>
+            <Text style={styles.continueText}>{dict.landing.continueChat}</Text>
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color="rgba(235,235,245,0.3)"
+            />
+          </Pressable>
+        )}
+
+        <SuggestionChips onSuggestion={handleSend} />
+      </View>
+
+      <View style={[styles.inputArea, { paddingBottom: insets.bottom + 8 }]}>
+        <ChatInput
+          onSubmit={handleSend}
+          placeholder={dict.chat.inputPlaceholder}
+        />
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  content: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  continueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: "rgba(118,118,128,0.12)",
+    borderRadius: 13,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  continueRowPressed: {
+    backgroundColor: "rgba(118,118,128,0.24)",
+  },
+  continueIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,122,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  continueText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "400",
+    color: "#fff",
+    letterSpacing: -0.24,
+  },
+  inputArea: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(84,84,88,0.65)",
+    backgroundColor: "rgba(28,28,30,0.94)",
+  },
+});
