@@ -34,6 +34,7 @@ import { useMapData } from "@/hooks/useMapData";
 import { useI18n } from "@/lib/i18n/i18n-provider";
 import { fetch as expoFetch } from "expo/fetch";
 import { FRONTEND_URL } from "@/lib/config";
+import { updateWidget } from "@/lib/widget";
 import { TabBarContext } from "@/app/_layout";
 import { MapDataContext, ArrivalsSheetContext } from "./_ctx";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
@@ -97,6 +98,7 @@ export default function ChatScreen() {
       }),
       onToolCall({ toolCall }) {
         if (toolCall.toolName === "display_arrivals") {
+          updateWidget(toolCall.input as DisplayArrivalsInput);
           addToolOutput({
             tool: "display_arrivals" as never,
             toolCallId: toolCall.toolCallId,

@@ -1,10 +1,11 @@
 import { View, Text, StyleSheet } from "react-native";
+import { useThemeMode } from "@/hooks/use-theme";
 
-function etaColor(minutes: number) {
-  if (minutes <= 0) return { bg: "rgba(255,69,58,0.16)", text: "#FF453A" };
-  if (minutes <= 3) return { bg: "rgba(48,209,88,0.16)", text: "#30D158" };
-  if (minutes <= 10) return { bg: "rgba(255,214,10,0.16)", text: "#FFD60A" };
-  return { bg: "rgba(142,142,147,0.16)", text: "rgba(235,235,245,0.6)" };
+function etaColor(minutes: number, isDark: boolean) {
+  if (minutes <= 0) return { bg: isDark ? "rgba(255,69,58,0.16)" : "rgba(255,69,58,0.12)", text: "#FF453A" };
+  if (minutes <= 3) return { bg: isDark ? "rgba(48,209,88,0.16)" : "rgba(48,209,88,0.14)", text: "#30D158" };
+  if (minutes <= 10) return { bg: isDark ? "rgba(255,214,10,0.16)" : "rgba(255,179,0,0.18)", text: isDark ? "#FFD60A" : "#B8860B" };
+  return { bg: isDark ? "rgba(142,142,147,0.16)" : "rgba(142,142,147,0.12)", text: isDark ? "rgba(235,235,245,0.6)" : "rgba(60,60,67,0.6)" };
 }
 
 export function EtaPill({
@@ -14,7 +15,8 @@ export function EtaPill({
   minutes: number;
   remarks?: string;
 }) {
-  const colors = etaColor(minutes);
+  const isDark = useThemeMode() === "dark";
+  const colors = etaColor(minutes, isDark);
 
   if (minutes <= 0) {
     return (

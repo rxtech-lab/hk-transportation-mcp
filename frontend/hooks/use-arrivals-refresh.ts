@@ -3,14 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useMemo } from "react";
 import type { DisplayArrivalsInput } from "@/lib/tools/display-arrivals";
+import { BACKEND_URL } from "@/lib/config";
 
 const REFRESH_INTERVAL = 30_000;
 
 async function fetchArrivals(
   stops: { id?: string; lat: number; lng: number }[],
 ): Promise<DisplayArrivalsInput["stops"]> {
-  console.log("Fetching arrivals for stops:", stops);
-  const res = await fetch("/api/arrivals", {
+  const res = await fetch(`${BACKEND_URL}/api/arrivals`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ stops }),
@@ -43,13 +43,6 @@ export function useArrivalsRefresh(
   const queryKeyStops = useMemo(
     () => queryStops.map((s) => s.id ?? `${s.lat},${s.lng}`).join("|"),
     [queryStops],
-  );
-
-  console.log(
-    "useArrivalsRefresh - queryStops:",
-    queryStops,
-    "queryKey:",
-    queryKeyStops,
   );
 
   // Keep a ref so queryFn always reads the latest stops

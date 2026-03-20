@@ -18,7 +18,7 @@ export const Colors = {
     textTertiary: '#8E8E93',
     separator: 'rgba(60,60,67,0.12)',
     separatorLight: 'rgba(60,60,67,0.06)',
-    cardBackground: 'rgba(242,242,247,0.95)',
+    cardBackground: 'rgba(255,255,255,0.95)',
     inputBackground: 'rgba(118,118,128,0.12)',
     headerBackground: '#ffffff',
     headerTint: '#000000',

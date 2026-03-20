@@ -1,14 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useMemo } from "react";
-import { FRONTEND_URL } from "@/lib/config";
+import { BACKEND_URL } from "@/lib/config";
 import type { DisplayArrivalsInput } from "@/lib/types";
+import { updateWidget } from "@/lib/widget";
 
 const REFRESH_INTERVAL = 30_000;
 
 async function fetchArrivals(
   stops: { id?: string; lat: number; lng: number }[],
 ): Promise<DisplayArrivalsInput["stops"]> {
-  const res = await fetch(`${FRONTEND_URL}/api/arrivals`, {
+  const res = await fetch(`${BACKEND_URL}/api/arrivals`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ stops }),
@@ -91,7 +92,9 @@ export function useArrivalsRefresh(
     });
 
     if (changed) {
-      setArrivalsData({ ...arrivalsData, stops: updatedStops });
+      const updated = { ...arrivalsData, stops: updatedStops };
+      setArrivalsData(updated);
+      updateWidget(updated);
     }
   }, [freshStops]); // eslint-disable-line react-hooks/exhaustive-deps
 

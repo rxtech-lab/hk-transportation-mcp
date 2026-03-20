@@ -10,6 +10,9 @@
     "ios": {
       "bundleIdentifier": "com.rxlab.hktransport",
       "icon": "./assets/images/ios-icon.png",
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.rxlab.hktransport"]
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We use your location to find nearby bus stops and show real-time arrivals.",
         "ITSAppUsesNonExemptEncryption": false
@@ -60,7 +63,8 @@
           "locationWhenInUsePermission": "We use your location to find nearby bus stops and show real-time arrivals."
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": true,
