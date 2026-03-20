@@ -35,6 +35,7 @@ import { useI18n } from "@/lib/i18n/i18n-provider";
 import { fetch as expoFetch } from "expo/fetch";
 import { FRONTEND_URL } from "@/lib/config";
 import { updateWidget } from "@/lib/widget";
+import { startTracking } from "@/lib/live-activity";
 import { TabBarContext } from "@/app/_layout";
 import { MapDataContext, ArrivalsSheetContext } from "./_ctx";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
@@ -100,7 +101,7 @@ export default function ChatScreen() {
     id: currentSessionId ? `session-${currentSessionId}` : "hk-transport-new",
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     transport: new DefaultChatTransport({
-      api: `${FRONTEND_URL}/api/chat`,
+      api: `${FRONTEND_URL}/api/chat?capabilities=liveActivity`,
       fetch: expoFetch as unknown as typeof globalThis.fetch,
     }),
     onToolCall({ toolCall }) {
@@ -110,6 +111,24 @@ export default function ChatScreen() {
           tool: "display_arrivals" as never,
           toolCallId: toolCall.toolCallId,
           output: "Arrival card displayed to user.",
+        });
+      }
+      if (toolCall.toolName === "show_live_activity") {
+        const input = toolCall.input as {
+          route: string;
+          stopName: string;
+          stopId: string;
+          destination: string;
+          etas: { minutes: number; remarks?: string }[];
+        };
+        startTracking(input).then((ok) => {
+          addToolOutput({
+            tool: "show_live_activity" as never,
+            toolCallId: toolCall.toolCallId,
+            output: ok
+              ? "Live Activity started. The user can now see real-time bus tracking on their Lock Screen and Dynamic Island."
+              : "Failed to start Live Activity. The device may not support Live Activities or the user has disabled them.",
+          });
         });
       }
       if (toolCall.toolName === "get_user_location") {

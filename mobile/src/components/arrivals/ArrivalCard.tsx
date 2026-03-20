@@ -1,8 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActionSheetIOS,
+  Alert,
   View,
   Text,
   Pressable,
+  Platform,
   StyleSheet,
   ActivityIndicator,
   ScrollView,
@@ -12,6 +15,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { EtaPill } from "./EtaPill";
 import { useTheme } from "@/hooks/use-theme";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
+import {
+  startTracking,
+  stopTracking,
+  getTrackedInfo,
+} from "@/lib/live-activity";
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], {
@@ -41,6 +49,10 @@ export function ArrivalCard({
   const theme = useTheme();
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const prevRefreshing = useRef(isRefreshing);
+  const [trackedKey, setTrackedKey] = useState<string | null>(() => {
+    const info = getTrackedInfo();
+    return info ? `${info.route}:${info.stopId}` : null;
+  });
 
   useEffect(() => {
     if (prevRefreshing.current !== isRefreshing) {
@@ -53,6 +65,72 @@ export function ArrivalCard({
       }).start();
     }
   }, [isRefreshing, fadeAnim]);
+
+  const handleRouteBadgePress = useCallback(
+    (stop: (typeof data.stops)[number], arrival: (typeof data.stops)[number]["arrivals"][number]) => {
+      const key = `${arrival.route}:${stop.id}`;
+      const isCurrentlyTracked = trackedKey === key;
+
+      if (Platform.OS === "ios") {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            title: `${arrival.route} → ${arrival.destination}`,
+            message: `at ${stop.name}`,
+            options: isCurrentlyTracked
+              ? ["Stop Tracking", "Cancel"]
+              : ["Track in Live Activity", "Cancel"],
+            cancelButtonIndex: 1,
+            destructiveButtonIndex: isCurrentlyTracked ? 0 : undefined,
+          },
+          async (buttonIndex) => {
+            if (buttonIndex === 0) {
+              if (isCurrentlyTracked) {
+                await stopTracking();
+                setTrackedKey(null);
+              } else {
+                const ok = await startTracking({
+                  route: arrival.route,
+                  stopName: stop.name,
+                  stopId: stop.id,
+                  destination: arrival.destination,
+                  etas: arrival.etas,
+                });
+                if (ok) setTrackedKey(key);
+              }
+            }
+          },
+        );
+      } else {
+        Alert.alert(
+          `${arrival.route} → ${arrival.destination}`,
+          `at ${stop.name}`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: isCurrentlyTracked ? "Stop Tracking" : "Track in Live Activity",
+              style: isCurrentlyTracked ? "destructive" : "default",
+              onPress: async () => {
+                if (isCurrentlyTracked) {
+                  await stopTracking();
+                  setTrackedKey(null);
+                } else {
+                  const ok = await startTracking({
+                    route: arrival.route,
+                    stopName: stop.name,
+                    stopId: stop.id,
+                    destination: arrival.destination,
+                    etas: arrival.etas,
+                  });
+                  if (ok) setTrackedKey(key);
+                }
+              },
+            },
+          ],
+        );
+      }
+    },
+    [trackedKey, data],
+  );
 
   return (
     <View style={[styles.card, { backgroundColor: theme.cardBackground }, stale && styles.stale]}>
@@ -153,10 +231,21 @@ export function ArrivalCard({
               >
                 {/* Route + destination row */}
                 <View style={styles.routeRow}>
-                  <View style={styles.routeBadge}>
-                    <Ionicons name="bus" size={10} color="#fff" />
+                  <Pressable
+                    onPress={() => handleRouteBadgePress(stop, arrival)}
+                    style={({ pressed }) => [
+                      styles.routeBadge,
+                      trackedKey === `${arrival.route}:${stop.id}` && styles.routeBadgeTracked,
+                      pressed && styles.routeBadgePressed,
+                    ]}
+                  >
+                    <Ionicons
+                      name={trackedKey === `${arrival.route}:${stop.id}` ? "radio" : "bus"}
+                      size={10}
+                      color="#fff"
+                    />
                     <Text style={styles.routeNumber}>{arrival.route}</Text>
-                  </View>
+                  </Pressable>
                   {showDest && (
                     <Text style={[styles.destination, { color: theme.textSecondary }]} numberOfLines={1}>
                       {arrival.destination}
@@ -307,6 +396,12 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
+  },
+  routeBadgeTracked: {
+    backgroundColor: "#34C759",
+  },
+  routeBadgePressed: {
+    opacity: 0.7,
   },
   routeNumber: {
     fontSize: 13,

@@ -1,3 +1,4 @@
+import ActivityKit
 import Foundation
 
 // MARK: - Stored config (what the app writes to UserDefaults)
@@ -68,6 +69,25 @@ struct WidgetArrival {
 }
 
 struct WidgetEta {
+    let minutes: Int
+    let remarks: String
+}
+
+// MARK: - Live Activity models
+
+struct TransitAttributes: ActivityAttributes {
+    public struct ContentState: Codable, Hashable {
+        var etas: [LiveEta]
+        var updatedAt: Double
+    }
+
+    var route: String
+    var stopName: String
+    var stopId: String
+    var destination: String
+}
+
+struct LiveEta: Codable, Hashable {
     let minutes: Int
     let remarks: String
 }
