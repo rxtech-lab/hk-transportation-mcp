@@ -8,6 +8,7 @@ import MapView, {
 } from "react-native-maps";
 import { HK_CENTER } from "@/constants/map";
 import { StopMarker } from "./StopMarker";
+import { useTheme } from "@/hooks/use-theme";
 import type { MapData, MapStop, LocationPin } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -22,6 +23,7 @@ export const TransportMap = forwardRef<MapView, TransportMapProps>(function Tran
   ref
 ) {
   const mapRef = useRef<MapView>(null);
+  const theme = useTheme();
 
   useImperativeHandle(ref, () => mapRef.current!, []);
 
@@ -120,14 +122,14 @@ export const TransportMap = forwardRef<MapView, TransportMapProps>(function Tran
         >
           <StopMarker stop={stop} />
           <Callout tooltip>
-            <View style={styles.callout}>
-              <Text style={styles.calloutTitle}>{stop.name}</Text>
+            <View style={[styles.callout, { backgroundColor: theme.cardBackground }]}>
+              <Text style={[styles.calloutTitle, { color: theme.text }]}>{stop.name}</Text>
               {stop.arrivals && stop.arrivals.length > 0 ? (
                 stop.arrivals.slice(0, 4).map((arrival, j) => (
                   <View key={j} style={styles.calloutArrival}>
-                    <View style={styles.calloutBadge}>
-                      <Ionicons name="bus" size={10} color="#a1a1aa" />
-                      <Text style={styles.calloutRoute}>
+                    <View style={[styles.calloutBadge, { backgroundColor: theme.routeBadgeBg }]}>
+                      <Ionicons name="bus" size={10} color={theme.textTertiary} />
+                      <Text style={[styles.calloutRoute, { color: theme.routeBadgeText }]}>
                         {arrival.route}
                       </Text>
                     </View>
@@ -175,7 +177,6 @@ export const TransportMap = forwardRef<MapView, TransportMapProps>(function Tran
 
 const styles = StyleSheet.create({
   callout: {
-    backgroundColor: "#18181b",
     borderRadius: 12,
     padding: 12,
     minWidth: 160,
@@ -184,7 +185,6 @@ const styles = StyleSheet.create({
   calloutTitle: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#fff",
     marginBottom: 6,
   },
   calloutArrival: {
@@ -197,7 +197,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "rgba(255,255,255,0.08)",
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -205,7 +204,6 @@ const styles = StyleSheet.create({
   calloutRoute: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#fff",
   },
   calloutEta: {
     fontSize: 10,

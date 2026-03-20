@@ -2,27 +2,29 @@ import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useI18n, locales } from "@/lib/i18n/i18n-provider";
+import { useTheme } from "@/hooks/use-theme";
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { locale } = useI18n();
+  const theme = useTheme();
 
   const currentLabel = locales.find((l) => l.code === locale)?.label ?? locale;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.section}>
+    <View style={[styles.container, { backgroundColor: theme.backgroundSecondary }]}>
+      <View style={[styles.section, { backgroundColor: theme.backgroundElement }]}>
         <Pressable
           onPress={() => router.push("/settings/language")}
           style={styles.row}
         >
           <View style={styles.rowLeft}>
-            <Ionicons name="language" size={20} color="#a1a1aa" />
-            <Text style={styles.rowLabel}>Language</Text>
+            <Ionicons name="language" size={20} color={theme.textTertiary} />
+            <Text style={[styles.rowLabel, { color: theme.text }]}>Language</Text>
           </View>
           <View style={styles.rowRight}>
-            <Text style={styles.rowValue}>{currentLabel}</Text>
-            <Ionicons name="chevron-forward" size={18} color="#71717a" />
+            <Text style={[styles.rowValue, { color: theme.textTertiary }]}>{currentLabel}</Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
           </View>
         </Pressable>
       </View>
@@ -33,12 +35,10 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#09090b",
     padding: 16,
   },
   section: {
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.04)",
     overflow: "hidden",
   },
   row: {
@@ -55,7 +55,6 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     fontSize: 16,
-    color: "#e4e4e7",
   },
   rowRight: {
     flexDirection: "row",
@@ -64,6 +63,5 @@ const styles = StyleSheet.create({
   },
   rowValue: {
     fontSize: 15,
-    color: "#71717a",
   },
 });

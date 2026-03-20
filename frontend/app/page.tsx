@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useMemo, type PointerEvent as ReactPointerEvent } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, startTransition, type PointerEvent as ReactPointerEvent } from "react";
 import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls, isToolUIPart } from "ai";
 import { AnimatePresence, motion } from "framer-motion";
@@ -122,8 +122,10 @@ export default function Home() {
     restoredRef.current = true;
     const stored = loadStoredMessages();
     if (stored.length > 0) {
-      setMessages(stored);
-      setIsLanding(false);
+      startTransition(() => {
+        setMessages(stored);
+        setIsLanding(false);
+      });
     }
   }, [setMessages]);
 

@@ -1,6 +1,7 @@
 import { createContext, useEffect, useState } from "react";
 import { AppState, Platform } from "react-native";
-import { ThemeProvider, DarkTheme } from "@react-navigation/native";
+import { ThemeProvider, DarkTheme, DefaultTheme } from "@react-navigation/native";
+import { useThemeMode } from "@/hooks/use-theme";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
@@ -19,6 +20,15 @@ export const TabBarContext = createContext<{
 }>({
   setIsTabBarHidden: () => {},
 });
+
+function ThemeAwareProvider({ children }: { children: React.ReactNode }) {
+  const mode = useThemeMode();
+  return (
+    <ThemeProvider value={mode === "dark" ? DarkTheme : DefaultTheme}>
+      {children}
+    </ThemeProvider>
+  );
+}
 
 function AppTabs() {
   const [isTabBarHidden, setIsTabBarHidden] = useState(false);
@@ -58,9 +68,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <I18nProvider>
-          <ThemeProvider value={DarkTheme}>
+          <ThemeAwareProvider>
             <AppTabs />
-          </ThemeProvider>
+          </ThemeAwareProvider>
         </I18nProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

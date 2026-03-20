@@ -5,16 +5,10 @@ import {
   convertToModelMessages,
   stepCountIs,
 } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { AI_GATEWAY_API_KEY, AI_GATEWAY_URL, AI_MODEL } from "@/lib/config";
+import { AI_MODEL } from "@/lib/config";
 import { getMCPClient, resetMCPClient } from "@/lib/mcp-client";
 import { displayArrivalsTool } from "@/lib/tools/display-arrivals";
 import { getUserLocationTool } from "@/lib/tools/get-user-location";
-
-const openai = createOpenAI({
-  baseURL: AI_GATEWAY_URL,
-  apiKey: AI_GATEWAY_API_KEY,
-});
 
 async function isHongKongTransportationQuery(
   modelMessages: Awaited<ReturnType<typeof convertToModelMessages>>,

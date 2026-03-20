@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, startTransition } from "react";
 import Map, { Source, Layer, Marker, type MapRef } from "react-map-gl/mapbox";
 import type { MapData, MapStop, LocationPin } from "./chat-messages";
 import { Popup } from "react-map-gl/mapbox";
@@ -74,10 +74,12 @@ export function TransportMap({ mapData, userLocation, selectedPin }: TransportMa
   useEffect(() => {
     if (!selectedPin) return;
     // Update viewState so map renders centered even if mapRef isn't ready yet (e.g. mobile drawer mounting)
-    setViewState({
-      latitude: selectedPin.lat,
-      longitude: selectedPin.lng,
-      zoom: 16,
+    startTransition(() => {
+      setViewState({
+        latitude: selectedPin.lat,
+        longitude: selectedPin.lng,
+        zoom: 16,
+      });
     });
     // Also flyTo if map is already mounted (desktop)
     if (mapRef.current) {
@@ -93,11 +95,13 @@ export function TransportMap({ mapData, userLocation, selectedPin }: TransportMa
     // Don't override view if a pin is selected
     if (selectedPin) return;
     if (userLocation) {
-      setViewState((prev) => ({
-        ...prev,
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-      }));
+      startTransition(() => {
+        setViewState((prev) => ({
+          ...prev,
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+        }));
+      });
     }
   }, [userLocation, selectedPin]);
 

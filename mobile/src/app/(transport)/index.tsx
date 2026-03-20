@@ -16,6 +16,7 @@ import {
   SuggestionChips,
 } from "@/components/landing/LandingView";
 import { ChatInput } from "@/components/chat/ChatInput";
+import { useTheme } from "@/hooks/use-theme";
 import { createSession, listSessions, migrateLegacyData } from "@/lib/db";
 import { useI18n } from "@/lib/i18n/i18n-provider";
 
@@ -23,6 +24,7 @@ export default function LandingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { dict } = useI18n();
+  const theme = useTheme();
   const [hasSession, setHasSession] = useState(false);
   const [latestSessionId, setLatestSessionId] = useState<string | null>(null);
 
@@ -58,7 +60,7 @@ export default function LandingScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, { paddingTop: insets.top + 16 }]}
+      style={[styles.root, { paddingTop: insets.top + 16, backgroundColor: theme.background }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
     >
@@ -70,17 +72,18 @@ export default function LandingScreen() {
             onPress={handleContinue}
             style={({ pressed }) => [
               styles.continueRow,
+              { backgroundColor: theme.inputBackground },
               pressed && styles.continueRowPressed,
             ]}
           >
             <View style={styles.continueIconWrap}>
               <Ionicons name="chatbubbles" size={16} color="#007AFF" />
             </View>
-            <Text style={styles.continueText}>{dict.landing.continueChat}</Text>
+            <Text style={[styles.continueText, { color: theme.text }]}>{dict.landing.continueChat}</Text>
             <Ionicons
               name="chevron-forward"
               size={16}
-              color="rgba(235,235,245,0.3)"
+              color={theme.chevronColor}
             />
           </Pressable>
         )}
@@ -88,7 +91,7 @@ export default function LandingScreen() {
         <SuggestionChips onSuggestion={handleSend} />
       </View>
 
-      <View style={[styles.inputArea, { paddingBottom: insets.bottom + 8 }]}>
+      <View style={[styles.inputArea, { paddingBottom: insets.bottom + 8, borderTopColor: theme.separator, backgroundColor: theme.backgroundSecondary }]}>
         <ChatInput
           onSubmit={handleSend}
           placeholder={dict.chat.inputPlaceholder}
@@ -101,7 +104,6 @@ export default function LandingScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#000",
   },
   content: {
     flex: 1,
@@ -112,14 +114,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginHorizontal: 20,
     marginBottom: 16,
-    backgroundColor: "rgba(118,118,128,0.12)",
     borderRadius: 13,
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 12,
   },
   continueRowPressed: {
-    backgroundColor: "rgba(118,118,128,0.24)",
+    opacity: 0.7,
   },
   continueIconWrap: {
     width: 32,
@@ -133,12 +134,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: "400",
-    color: "#fff",
     letterSpacing: -0.24,
   },
   inputArea: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(84,84,88,0.65)",
-    backgroundColor: "rgba(28,28,30,0.94)",
   },
 });

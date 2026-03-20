@@ -1,6 +1,7 @@
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useI18n } from "@/lib/i18n/i18n-provider";
+import { useTheme } from "@/hooks/use-theme";
 
 const SUGGESTION_ICONS: Record<number, keyof typeof Ionicons.glyphMap> = {
   0: "location",
@@ -18,13 +19,14 @@ function useGreeting() {
 
 export function LandingHeader() {
   const { dict } = useI18n();
+  const theme = useTheme();
   const greeting = useGreeting();
 
   return (
     <View style={styles.header}>
-      <Text style={styles.greeting}>{greeting}</Text>
-      <Text style={styles.title}>{dict.landing.title}</Text>
-      <Text style={styles.subtitle}>{dict.landing.subtitle}</Text>
+      <Text style={[styles.greeting, { color: theme.textSecondary }]}>{greeting}</Text>
+      <Text style={[styles.title, { color: theme.text }]}>{dict.landing.title}</Text>
+      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{dict.landing.subtitle}</Text>
     </View>
   );
 }
@@ -35,6 +37,7 @@ export function SuggestionChips({
   onSuggestion: (text: string) => void;
 }) {
   const { dict } = useI18n();
+  const theme = useTheme();
 
   return (
     <View style={styles.suggestions}>
@@ -44,6 +47,7 @@ export function SuggestionChips({
           onPress={() => onSuggestion(suggestion)}
           style={({ pressed }) => [
             styles.suggestionCard,
+            { backgroundColor: theme.inputBackground },
             pressed && styles.suggestionCardPressed,
           ]}
         >
@@ -54,13 +58,13 @@ export function SuggestionChips({
               color="#007AFF"
             />
           </View>
-          <Text style={styles.suggestionText} numberOfLines={2}>
+          <Text style={[styles.suggestionText, { color: theme.text }]} numberOfLines={2}>
             {suggestion}
           </Text>
           <Ionicons
             name="chevron-forward"
             size={14}
-            color="rgba(235,235,245,0.3)"
+            color={theme.chevronColor}
             style={styles.suggestionChevron}
           />
         </Pressable>
@@ -77,20 +81,17 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: 16,
     fontWeight: "400",
-    color: "rgba(235,235,245,0.6)",
     marginBottom: 4,
   },
   title: {
     fontSize: 34,
     fontWeight: "700",
-    color: "#fff",
     letterSpacing: 0.37,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 15,
     fontWeight: "400",
-    color: "rgba(235,235,245,0.6)",
     lineHeight: 20,
     letterSpacing: -0.24,
   },
@@ -102,14 +103,13 @@ const styles = StyleSheet.create({
   suggestionCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(118,118,128,0.12)",
     borderRadius: 13,
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 12,
   },
   suggestionCardPressed: {
-    backgroundColor: "rgba(118,118,128,0.24)",
+    opacity: 0.7,
   },
   suggestionIconWrap: {
     width: 32,
@@ -123,7 +123,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: "400",
-    color: "#fff",
     letterSpacing: -0.24,
   },
   suggestionChevron: {

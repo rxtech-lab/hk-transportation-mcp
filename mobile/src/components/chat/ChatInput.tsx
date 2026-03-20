@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { View, TextInput, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { useTheme } from "@/hooks/use-theme";
 
 interface ChatInputProps {
   onSubmit: (text: string) => void;
@@ -17,6 +18,7 @@ export function ChatInput({
   compact = false,
 }: ChatInputProps) {
   const [text, setText] = useState("");
+  const theme = useTheme();
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
@@ -30,11 +32,11 @@ export function ChatInput({
 
   return (
     <View style={styles.container}>
-      <View style={[styles.inputWrapper, compact && styles.inputWrapperCompact]}>
+      <View style={[styles.inputWrapper, { backgroundColor: theme.inputBackground }, compact && styles.inputWrapperCompact]}>
         <TextInput
-          style={[styles.input, compact && styles.inputCompact]}
+          style={[styles.input, { color: theme.text }, compact && styles.inputCompact]}
           placeholder={placeholder}
-          placeholderTextColor="rgba(235,235,245,0.3)"
+          placeholderTextColor={theme.textTertiary}
           value={text}
           onChangeText={setText}
           onSubmitEditing={handleSend}
@@ -50,7 +52,7 @@ export function ChatInput({
           disabled={!canSend}
           style={({ pressed }) => [
             styles.sendButton,
-            canSend ? styles.sendActive : styles.sendDisabled,
+            canSend ? styles.sendActive : { backgroundColor: theme.inputBackground },
             pressed && canSend && styles.sendPressed,
           ]}
           hitSlop={8}
@@ -58,7 +60,7 @@ export function ChatInput({
           <Ionicons
             name="arrow-up"
             size={18}
-            color={canSend ? "#fff" : "rgba(235,235,245,0.3)"}
+            color={canSend ? "#fff" : theme.textTertiary}
           />
         </Pressable>
       </View>
@@ -72,7 +74,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   inputWrapper: {
-    backgroundColor: "rgba(118,118,128,0.12)",
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingTop: 10,
@@ -84,7 +85,6 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   },
   input: {
-    color: "#fff",
     fontSize: 17,
     letterSpacing: -0.41,
     minHeight: 80,
@@ -105,9 +105,6 @@ const styles = StyleSheet.create({
   },
   sendActive: {
     backgroundColor: "#007AFF",
-  },
-  sendDisabled: {
-    backgroundColor: "rgba(118,118,128,0.12)",
   },
   sendPressed: {
     opacity: 0.7,

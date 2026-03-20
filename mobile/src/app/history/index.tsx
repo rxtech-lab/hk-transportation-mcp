@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { listSessions, deleteSession, type ChatSessionMeta } from "@/lib/db";
 import { useI18n } from "@/lib/i18n/i18n-provider";
+import { useTheme } from "@/hooks/use-theme";
 
 function formatRelativeTime(timestamp: number): string {
   const diff = Date.now() - timestamp;
@@ -31,6 +32,7 @@ export default function HistoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { dict } = useI18n();
+  const theme = useTheme();
   const [sessions, setSessions] = useState<ChatSessionMeta[]>([]);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
@@ -89,24 +91,25 @@ export default function HistoryScreen() {
           onPress={() => handleTap(item)}
           style={({ pressed }) => [
             styles.row,
-            pressed && styles.rowPressed,
+            { backgroundColor: theme.backgroundSecondary, borderBottomColor: theme.separator },
+            pressed && { backgroundColor: theme.inputBackground },
           ]}
         >
-          <View style={styles.rowIcon}>
-            <Ionicons name="chatbubble-outline" size={18} color="#8E8E93" />
+          <View style={[styles.rowIcon, { backgroundColor: theme.inputBackground }]}>
+            <Ionicons name="chatbubble-outline" size={18} color={theme.textTertiary} />
           </View>
           <View style={styles.rowContent}>
-            <Text style={styles.rowTitle} numberOfLines={1}>
+            <Text style={[styles.rowTitle, { color: theme.text }]} numberOfLines={1}>
               {item.title || dict.history.untitled}
             </Text>
-            <Text style={styles.rowTime}>
+            <Text style={[styles.rowTime, { color: theme.textTertiary }]}>
               {formatRelativeTime(item.updatedAt)}
             </Text>
           </View>
           <Ionicons
             name="chevron-forward"
             size={16}
-            color="rgba(235,235,245,0.3)"
+            color={theme.chevronColor}
           />
         </Pressable>
       </Swipeable>
@@ -116,9 +119,9 @@ export default function HistoryScreen() {
 
   if (sessions.length === 0) {
     return (
-      <View style={styles.empty}>
-        <Ionicons name="chatbubbles-outline" size={48} color="#3A3A3C" />
-        <Text style={styles.emptyText}>{dict.history.empty}</Text>
+      <View style={[styles.empty, { backgroundColor: theme.backgroundSecondary }]}>
+        <Ionicons name="chatbubbles-outline" size={48} color={theme.textTertiary} />
+        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>{dict.history.empty}</Text>
       </View>
     );
   }
@@ -129,7 +132,7 @@ export default function HistoryScreen() {
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
       contentContainerStyle={{ paddingBottom: insets.bottom }}
-      style={styles.list}
+      style={[styles.list, { backgroundColor: theme.backgroundSecondary }]}
     />
   );
 }
@@ -137,26 +140,19 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   list: {
     flex: 1,
-    backgroundColor: "#09090b",
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: "#09090b",
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(84,84,88,0.65)",
     gap: 12,
-  },
-  rowPressed: {
-    backgroundColor: "rgba(118,118,128,0.12)",
   },
   rowIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "rgba(118,118,128,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -166,12 +162,10 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 15,
     fontWeight: "500",
-    color: "#fff",
     letterSpacing: -0.24,
   },
   rowTime: {
     fontSize: 13,
-    color: "#8E8E93",
     marginTop: 2,
   },
   deleteAction: {
@@ -188,13 +182,11 @@ const styles = StyleSheet.create({
   },
   empty: {
     flex: 1,
-    backgroundColor: "#09090b",
     alignItems: "center",
     justifyContent: "center",
     gap: 12,
   },
   emptyText: {
     fontSize: 15,
-    color: "#8E8E93",
   },
 });

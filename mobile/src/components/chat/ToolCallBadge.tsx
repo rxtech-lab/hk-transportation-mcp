@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "@/hooks/use-theme";
 
 export function ToolCallBadge({
   toolName,
@@ -8,6 +9,7 @@ export function ToolCallBadge({
   toolName: string;
   state: string;
 }) {
+  const theme = useTheme();
   const isDone = state === "output-available";
   const isError = state === "output-error";
 
@@ -15,12 +17,12 @@ export function ToolCallBadge({
     ? "rgba(34,197,94,0.1)"
     : isError
       ? "rgba(239,68,68,0.1)"
-      : "rgba(255,255,255,0.04)";
+      : theme.toolPendingBackground;
   const textColor = isDone
     ? "#4ade80"
     : isError
       ? "#f87171"
-      : "#71717a";
+      : theme.textTertiary;
 
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>

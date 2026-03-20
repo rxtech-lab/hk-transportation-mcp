@@ -54,7 +54,9 @@ export function useArrivalsRefresh(
 
   // Keep a ref so queryFn always reads the latest stops
   const queryStopsRef = useRef(queryStops);
-  queryStopsRef.current = queryStops;
+  useEffect(() => {
+    queryStopsRef.current = queryStops;
+  }, [queryStops]);
 
   const {
     data: freshStops,
