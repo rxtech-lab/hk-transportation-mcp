@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,6 +28,13 @@ export default function LandingScreen() {
   const theme = useTheme();
   const [hasSession, setHasSession] = useState(false);
   const [latestSessionId, setLatestSessionId] = useState<string | null>(null);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardWillShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardWillHide", () => setKeyboardVisible(false));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -64,7 +72,7 @@ export default function LandingScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
     >
-      <View style={styles.content}>
+      <Pressable style={styles.content} onPress={Keyboard.dismiss}>
         <LandingHeader />
 
         {hasSession && (
@@ -89,9 +97,9 @@ export default function LandingScreen() {
         )}
 
         <SuggestionChips onSuggestion={handleSend} />
-      </View>
+      </Pressable>
 
-      <View style={[styles.inputArea, { paddingBottom: insets.bottom + 8, borderTopColor: theme.separator, backgroundColor: theme.backgroundSecondary }]}>
+      <View style={[styles.inputArea, { paddingBottom: keyboardVisible ? 0 : insets.bottom, borderTopColor: theme.separator, backgroundColor: theme.background }]}>
         <ChatInput
           onSubmit={handleSend}
           placeholder={dict.chat.inputPlaceholder}

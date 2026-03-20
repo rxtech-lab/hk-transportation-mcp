@@ -14,6 +14,7 @@ interface AssistantMessageProps {
   lastRefreshedAt?: number | null;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  onArrivalsExpand?: (data: DisplayArrivalsInput) => void;
 }
 
 export function AssistantMessage({
@@ -25,6 +26,7 @@ export function AssistantMessage({
   lastRefreshedAt,
   onRefresh,
   isRefreshing,
+  onArrivalsExpand,
 }: AssistantMessageProps) {
   return (
     <View style={styles.container}>
@@ -67,6 +69,11 @@ export function AssistantMessage({
                   }
                   onRefresh={isLatest ? onRefresh : undefined}
                   isRefreshing={isLatest ? isRefreshing : undefined}
+                  onHeaderPress={
+                    onArrivalsExpand
+                      ? () => onArrivalsExpand(cardData)
+                      : undefined
+                  }
                 />
               </View>
             );

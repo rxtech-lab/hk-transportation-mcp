@@ -5,6 +5,7 @@ import {
   Text,
   Pressable,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,6 +27,7 @@ import { useChatSessionStorage } from "@/hooks/useChatSessions";
 import {
   createSession,
   loadSessionMessages,
+  getSessionTitle,
   updateSessionTitle,
 } from "@/lib/db";
 import { useMapData } from "@/hooks/useMapData";
@@ -33,7 +35,7 @@ import { useI18n } from "@/lib/i18n/i18n-provider";
 import { fetch as expoFetch } from "expo/fetch";
 import { FRONTEND_URL } from "@/lib/config";
 import { TabBarContext } from "@/app/_layout";
-import { MapDataContext } from "./_ctx";
+import { MapDataContext, ArrivalsSheetContext } from "./_ctx";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
 
 export default function ChatScreen() {
@@ -48,12 +50,23 @@ export default function ChatScreen() {
   const [arrivalsOverride, setArrivalsOverride] =
     useState<DisplayArrivalsInput | null>(null);
   const [selectedPin, setSelectedPin] = useState<LocationPin | null>(null);
+  const { setSheetData } = use(ArrivalsSheetContext);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(
     paramSessionId ?? null,
+  );
+  const [sessionTitle, setSessionTitle] = useState<string | null>(
+    paramSessionId ? getSessionTitle(paramSessionId) : null,
   );
   const geo = useGeolocation();
   const { dict } = useI18n();
   const theme = useTheme();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardWillShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardWillHide", () => setKeyboardVisible(false));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
   const geoRequestedRef = useRef(false);
   const geoRef = useRef(geo);
   geoRef.current = geo;
@@ -161,6 +174,7 @@ export default function ChatScreen() {
         .then((data) => {
           if (data.title) {
             updateSessionTitle(currentSessionId, data.title);
+            setSessionTitle(data.title);
           }
         })
         .catch(() => {});
@@ -250,6 +264,20 @@ export default function ChatScreen() {
     router.push("/(transport)/map");
   }, [mapData, userLocation, selectedPin, setMapScreenData, router]);
 
+  const handleArrivalsExpand = useCallback(
+    (data: DisplayArrivalsInput) => {
+      setSheetData({
+        data,
+        onLocationClick: handleLocationClick,
+        lastRefreshedAt,
+        onRefresh: refetchArrivals,
+        isRefreshing,
+      });
+      router.push("/(transport)/arrivals");
+    },
+    [setSheetData, handleLocationClick, lastRefreshedAt, refetchArrivals, isRefreshing, router],
+  );
+
   const handleSend = useCallback(
     (text: string) => {
       if (!geoRequestedRef.current) {
@@ -288,6 +316,7 @@ export default function ChatScreen() {
     <>
       <Stack.Screen
         options={{
+          title: sessionTitle || dict.chat.headerTitle,
           headerLeft: () => (
             <Pressable onPress={handleBack} style={styles.headerButton}>
               <Ionicons name="chevron-back" size={22} color={theme.headerTint} />
@@ -314,6 +343,7 @@ export default function ChatScreen() {
           lastRefreshedAt={lastRefreshedAt}
           onRefresh={refetchArrivals}
           isRefreshing={isRefreshing}
+          onArrivalsExpand={handleArrivalsExpand}
         />
 
         {/* Error */}
@@ -325,8 +355,17 @@ export default function ChatScreen() {
           </View>
         )}
 
+        {/* Location permission banner */}
+        {geo.permissionDenied && (
+          <Pressable onPress={geo.openSettings} style={styles.locationBanner}>
+            <Ionicons name="location-outline" size={16} color="#f59e0b" />
+            <Text style={styles.locationBannerText}>{dict.chat.locationDenied}</Text>
+            <Text style={styles.locationBannerAction}>{dict.chat.locationSettings}</Text>
+          </Pressable>
+        )}
+
         {/* Map button + Input */}
-        <View style={[styles.inputArea, { paddingBottom: insets.bottom + 4, borderTopColor: theme.separatorLight, backgroundColor: theme.backgroundSecondary }]}>
+        <View style={[styles.inputArea, { paddingBottom: keyboardVisible ? 0 : insets.bottom, borderTopColor: theme.separatorLight }]}>
           <Pressable onPress={handleOpenMap} style={[styles.mapButton, { borderBottomColor: theme.separatorLight }]}>
             <Ionicons name="map" size={18} color="#60a5fa" />
             <Text style={[styles.mapButtonText, { color: theme.textSecondary }]}>
@@ -412,5 +451,24 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 13,
     color: "#f87171",
+  },
+  locationBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "rgba(245,158,11,0.1)",
+  },
+  locationBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#f59e0b",
+    fontWeight: "500",
+  },
+  locationBannerAction: {
+    fontSize: 13,
+    color: "#3b82f6",
+    fontWeight: "600",
   },
 });

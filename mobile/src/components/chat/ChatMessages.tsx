@@ -13,6 +13,7 @@ interface ChatMessagesProps {
   lastRefreshedAt?: number | null;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  onArrivalsExpand?: (data: DisplayArrivalsInput) => void;
 }
 
 interface PreparedItem {
@@ -91,6 +92,7 @@ export function ChatMessagesList({
   lastRefreshedAt,
   onRefresh,
   isRefreshing,
+  onArrivalsExpand,
 }: ChatMessagesProps) {
   const listRef = useRef<FlatList<PreparedItem>>(null);
   const isNearBottomRef = useRef(true);
@@ -235,10 +237,11 @@ export function ChatMessagesList({
           lastRefreshedAt={lastRefreshedAt}
           onRefresh={onRefresh}
           isRefreshing={isRefreshing}
+          onArrivalsExpand={onArrivalsExpand}
         />
       );
     },
-    [arrivalsData, onLocationClick, lastRefreshedAt, onRefresh, isRefreshing]
+    [arrivalsData, onLocationClick, lastRefreshedAt, onRefresh, isRefreshing, onArrivalsExpand]
   );
 
   if (messages.length === 0) return null;

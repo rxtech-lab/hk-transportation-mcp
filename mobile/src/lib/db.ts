@@ -104,6 +104,14 @@ export function deleteSession(id: string): void {
   db.runSync("DELETE FROM sessions WHERE id = ?", [id]);
 }
 
+export function getSessionTitle(id: string): string | null {
+  const row = db.getFirstSync<{ title: string | null }>(
+    "SELECT title FROM sessions WHERE id = ?",
+    [id],
+  );
+  return row?.title ?? null;
+}
+
 export function updateSessionTitle(id: string, title: string): void {
   db.runSync("UPDATE sessions SET title = ? WHERE id = ?", [title, id]);
 }
