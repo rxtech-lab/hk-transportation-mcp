@@ -20,7 +20,7 @@ export function EtaPill({
 
   if (minutes <= 0) {
     return (
-      <View style={[styles.pill, { backgroundColor: colors.bg }]}>
+      <View style={[styles.pill, { backgroundColor: colors.bg, alignItems: "center" }]}>
         <Text style={[styles.departedText, { color: colors.text }]}>Left</Text>
       </View>
     );

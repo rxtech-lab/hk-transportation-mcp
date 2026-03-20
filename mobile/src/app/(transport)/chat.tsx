@@ -64,9 +64,16 @@ export default function ChatScreen() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardWillShow", () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener("keyboardWillHide", () => setKeyboardVisible(false));
-    return () => { showSub.remove(); hideSub.remove(); };
+    const showSub = Keyboard.addListener("keyboardWillShow", () =>
+      setKeyboardVisible(true),
+    );
+    const hideSub = Keyboard.addListener("keyboardWillHide", () =>
+      setKeyboardVisible(false),
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
   const geoRequestedRef = useRef(false);
   const geoRef = useRef(geo);
@@ -90,68 +97,64 @@ export default function ChatScreen() {
     error,
     addToolOutput,
   } = useChat({
-      id: currentSessionId ? `session-${currentSessionId}` : "hk-transport-new",
-      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-      transport: new DefaultChatTransport({
-        api: `${FRONTEND_URL}/api/chat`,
-        fetch: expoFetch as unknown as typeof globalThis.fetch,
-      }),
-      onToolCall({ toolCall }) {
-        if (toolCall.toolName === "display_arrivals") {
-          updateWidget(toolCall.input as DisplayArrivalsInput);
+    id: currentSessionId ? `session-${currentSessionId}` : "hk-transport-new",
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    transport: new DefaultChatTransport({
+      api: `${FRONTEND_URL}/api/chat`,
+      fetch: expoFetch as unknown as typeof globalThis.fetch,
+    }),
+    onToolCall({ toolCall }) {
+      if (toolCall.toolName === "display_arrivals") {
+        updateWidget(toolCall.input as DisplayArrivalsInput);
+        addToolOutput({
+          tool: "display_arrivals" as never,
+          toolCallId: toolCall.toolCallId,
+          output: "Arrival card displayed to user.",
+        });
+      }
+      if (toolCall.toolName === "get_user_location") {
+        const g = geoRef.current;
+        if (g.latitude && g.longitude) {
           addToolOutput({
-            tool: "display_arrivals" as never,
+            tool: "get_user_location" as never,
             toolCallId: toolCall.toolCallId,
-            output: "Arrival card displayed to user.",
+            output: JSON.stringify({
+              latitude: g.latitude,
+              longitude: g.longitude,
+            }),
+          });
+        } else {
+          geo.request().then((coords) => {
+            if (coords) {
+              addToolOutput({
+                tool: "get_user_location" as never,
+                toolCallId: toolCall.toolCallId,
+                output: JSON.stringify({
+                  latitude: coords.latitude,
+                  longitude: coords.longitude,
+                }),
+              });
+            } else {
+              addToolOutput({
+                tool: "get_user_location" as never,
+                toolCallId: toolCall.toolCallId,
+                output: JSON.stringify({
+                  error:
+                    "Location unavailable. The user may have denied location permission.",
+                }),
+              });
+            }
           });
         }
-        if (toolCall.toolName === "get_user_location") {
-          const g = geoRef.current;
-          if (g.latitude && g.longitude) {
-            addToolOutput({
-              tool: "get_user_location" as never,
-              toolCallId: toolCall.toolCallId,
-              output: JSON.stringify({
-                latitude: g.latitude,
-                longitude: g.longitude,
-              }),
-            });
-          } else {
-            geo.request().then((coords) => {
-              if (coords) {
-                addToolOutput({
-                  tool: "get_user_location" as never,
-                  toolCallId: toolCall.toolCallId,
-                  output: JSON.stringify({
-                    latitude: coords.latitude,
-                    longitude: coords.longitude,
-                  }),
-                });
-              } else {
-                addToolOutput({
-                  tool: "get_user_location" as never,
-                  toolCallId: toolCall.toolCallId,
-                  output: JSON.stringify({
-                    error:
-                      "Location unavailable. The user may have denied location permission.",
-                  }),
-                });
-              }
-            });
-          }
-        }
-      },
-    });
+      }
+    },
+  });
 
   useChatSessionStorage(currentSessionId, messages);
 
   // Auto-generate title after first assistant response
   useEffect(() => {
-    if (
-      titleGeneratedRef.current ||
-      !currentSessionId ||
-      messages.length < 2
-    ) {
+    if (titleGeneratedRef.current || !currentSessionId || messages.length < 2) {
       return;
     }
     const wasStreaming = prevStatusRef.current === "streaming";
@@ -277,7 +280,14 @@ export default function ChatScreen() {
       });
       router.push("/(transport)/arrivals");
     },
-    [setSheetData, handleLocationClick, lastRefreshedAt, refetchArrivals, isRefreshing, router],
+    [
+      setSheetData,
+      handleLocationClick,
+      lastRefreshedAt,
+      refetchArrivals,
+      isRefreshing,
+      router,
+    ],
   );
 
   const handleSend = useCallback(
@@ -306,6 +316,7 @@ export default function ChatScreen() {
     setCurrentSessionId(session.id);
     setMessages([]);
     setArrivalsOverride(null);
+    setSessionTitle(null);
     geoRequestedRef.current = false;
     titleGeneratedRef.current = false;
     prevStatusRef.current = "";
@@ -320,12 +331,24 @@ export default function ChatScreen() {
         options={{
           title: sessionTitle || dict.chat.headerTitle,
           headerLeft: () => (
-            <Pressable onPress={handleBack} style={styles.headerButton}>
-              <Ionicons name="chevron-back" size={22} color={theme.headerTint} />
+            <Pressable
+              onPress={handleBack}
+              style={styles.headerButton}
+              testID="back-btn"
+            >
+              <Ionicons
+                name="chevron-back"
+                size={22}
+                color={theme.headerTint}
+              />
             </Pressable>
           ),
           headerRight: () => (
-            <Pressable onPress={handleClear} style={styles.headerButton}>
+            <Pressable
+              onPress={handleClear}
+              style={styles.headerButton}
+              testID="clear-btn"
+            >
               <Ionicons name="add" size={22} color={theme.textSecondary} />
             </Pressable>
           ),
@@ -334,7 +357,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView
         style={[styles.root, { backgroundColor: theme.backgroundSecondary }]}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={22}
       >
         {/* Messages */}
         <ChatMessagesList
@@ -361,19 +384,41 @@ export default function ChatScreen() {
         {geo.permissionDenied && (
           <Pressable onPress={geo.openSettings} style={styles.locationBanner}>
             <Ionicons name="location-outline" size={16} color="#f59e0b" />
-            <Text style={styles.locationBannerText}>{dict.chat.locationDenied}</Text>
-            <Text style={styles.locationBannerAction}>{dict.chat.locationSettings}</Text>
+            <Text style={styles.locationBannerText}>
+              {dict.chat.locationDenied}
+            </Text>
+            <Text style={styles.locationBannerAction}>
+              {dict.chat.locationSettings}
+            </Text>
           </Pressable>
         )}
 
         {/* Map button + Input */}
-        <View style={[styles.inputArea, { paddingBottom: keyboardVisible ? 0 : insets.bottom, borderTopColor: theme.separatorLight }]}>
-          <Pressable onPress={handleOpenMap} style={[styles.mapButton, { borderBottomColor: theme.separatorLight }]}>
+        <View
+          style={[
+            styles.inputArea,
+            {
+              paddingBottom: keyboardVisible ? 0 : insets.bottom,
+              borderTopColor: theme.separatorLight,
+            },
+          ]}
+        >
+          <Pressable
+            onPress={handleOpenMap}
+            style={[
+              styles.mapButton,
+              { borderBottomColor: theme.separatorLight },
+            ]}
+          >
             <Ionicons name="map" size={18} color="#60a5fa" />
-            <Text style={[styles.mapButtonText, { color: theme.textSecondary }]}>
+            <Text
+              style={[styles.mapButtonText, { color: theme.textSecondary }]}
+            >
               {hasMapContent
                 ? `${mapData.stops.length} ${
-                    mapData.stops.length !== 1 ? dict.chat.stops : dict.chat.stop
+                    mapData.stops.length !== 1
+                      ? dict.chat.stops
+                      : dict.chat.stop
                   }${
                     mapData.routes.length > 0
                       ? ` · ${mapData.routes.length} ${

@@ -31,9 +31,16 @@ export default function LandingScreen() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardWillShow", () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener("keyboardWillHide", () => setKeyboardVisible(false));
-    return () => { showSub.remove(); hideSub.remove(); };
+    const showSub = Keyboard.addListener("keyboardWillShow", () =>
+      setKeyboardVisible(true),
+    );
+    const hideSub = Keyboard.addListener("keyboardWillHide", () =>
+      setKeyboardVisible(false),
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   useFocusEffect(
@@ -68,7 +75,10 @@ export default function LandingScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, { paddingTop: insets.top + 16, backgroundColor: theme.background }]}
+      style={[
+        styles.root,
+        { paddingTop: insets.top + 16, backgroundColor: theme.background },
+      ]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
     >
@@ -78,6 +88,7 @@ export default function LandingScreen() {
         {hasSession && (
           <Pressable
             onPress={handleContinue}
+            testID="continue-btn"
             style={({ pressed }) => [
               styles.continueRow,
               { backgroundColor: theme.inputBackground },
@@ -87,7 +98,9 @@ export default function LandingScreen() {
             <View style={styles.continueIconWrap}>
               <Ionicons name="chatbubbles" size={16} color="#007AFF" />
             </View>
-            <Text style={[styles.continueText, { color: theme.text }]}>{dict.landing.continueChat}</Text>
+            <Text style={[styles.continueText, { color: theme.text }]}>
+              {dict.landing.continueChat}
+            </Text>
             <Ionicons
               name="chevron-forward"
               size={16}
@@ -99,7 +112,16 @@ export default function LandingScreen() {
         <SuggestionChips onSuggestion={handleSend} />
       </Pressable>
 
-      <View style={[styles.inputArea, { paddingBottom: keyboardVisible ? 0 : insets.bottom, borderTopColor: theme.separator, backgroundColor: theme.background }]}>
+      <View
+        style={[
+          styles.inputArea,
+          {
+            paddingBottom: keyboardVisible ? 0 : insets.bottom,
+            borderTopColor: theme.separator,
+            backgroundColor: theme.background,
+          },
+        ]}
+      >
         <ChatInput
           onSubmit={handleSend}
           placeholder={dict.chat.inputPlaceholder}

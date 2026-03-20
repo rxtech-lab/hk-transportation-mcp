@@ -1,0 +1,81 @@
+name: Maestro UI Tests
+
+on:
+  push:
+
+jobs:
+  maestro-ios:
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install dependencies and Maestro
+        run: |
+          bun install
+          npm install -g eas-cli
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          arch -arm64 brew tap facebook/fb
+          arch -arm64 brew install facebook/fb/idb-companion || true
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Build production app for simulator
+        run: |
+          eas build --platform ios --profile simulator --local --non-interactive --output ./build.tar.gz
+          tar -xzf build.tar.gz
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Start iOS Simulator
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available --json | jq -r '.devices[] | .[] | select(.name == "iPhone 17") | .udid' | head -n 1)
+
+          if [ -z "$DEVICE_ID" ]; then
+            DEVICE_ID=$(xcrun simctl list devices available --json | jq -r '.devices[] | .[] | select(.name | startswith("iPhone")) | .udid' | head -n 1)
+          fi
+
+          if [ -z "$DEVICE_ID" ]; then
+            echo "No available iPhone simulator found."
+            exit 1
+          fi
+
+          DEVICE_STATE=$(xcrun simctl list devices available --json | jq -r --arg DEVICE_ID "$DEVICE_ID" '.devices[] | .[] | select(.udid == $DEVICE_ID) | .state')
+
+          echo "DEVICE_ID=$DEVICE_ID" >> $GITHUB_ENV
+
+          if [ "$DEVICE_STATE" != "Booted" ]; then
+            xcrun simctl boot "$DEVICE_ID"
+            sleep 30
+          else
+            echo "Simulator $DEVICE_ID is already booted."
+          fi
+
+      - name: Install app on simulator
+        run: |
+          APP_PATH=$(find . -maxdepth 1 -name "*.app" -type d | head -n 1)
+          echo "Installing $APP_PATH"
+          xcrun simctl install $DEVICE_ID "$APP_PATH"
+
+      - name: Run Maestro tests
+        run: maestro --device $DEVICE_ID test e2e/
+
+      - name: Shutdown simulator
+        if: always()
+        run: xcrun simctl shutdown $DEVICE_ID || true

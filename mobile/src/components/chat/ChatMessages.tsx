@@ -244,8 +244,6 @@ export function ChatMessagesList({
     [arrivalsData, onLocationClick, lastRefreshedAt, onRefresh, isRefreshing, onArrivalsExpand]
   );
 
-  if (messages.length === 0) return null;
-
   return (
     <FlatList
       ref={listRef}

@@ -27,6 +27,16 @@
         "EXPO_PUBLIC_FRONTEND_URL": "https://hk.transportation.rxlab.app",
         "EXPO_PUBLIC_BACKEND_URL": "https://hk.transport.mcprouter.app"
       }
+    },
+    "simulator": {
+      "ios": {
+        "simulator": true,
+        "buildConfiguration": "Release"
+      },
+      "env": {
+        "EXPO_PUBLIC_FRONTEND_URL": "https://hk.transportation.rxlab.app",
+        "EXPO_PUBLIC_BACKEND_URL": "https://hk.transport.mcprouter.app"
+      }
     }
   },
   "submit": {
