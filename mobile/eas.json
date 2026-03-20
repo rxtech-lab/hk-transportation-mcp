@@ -11,6 +11,16 @@
         "simulator": true
       }
     },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "buildConfiguration": "Release"
+      },
+      "env": {
+        "EXPO_PUBLIC_FRONTEND_URL": "https://hk.transportation.rxlab.app",
+        "EXPO_PUBLIC_BACKEND_URL": "https://hk.transport.mcprouter.app/mcp"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "env": {
@@ -21,8 +31,20 @@
   },
   "submit": {
     "production": {
-      "ios": {},
-      "android": {}
+      "ios": {
+        "ascAppId": "dbeec49c-a9e7-4478-b52e-bb9bfe11a565"
+      },
+      "android": {
+        "track": "production"
+      }
+    },
+    "preview": {
+      "ios": {
+        "ascAppId": "dbeec49c-a9e7-4478-b52e-bb9bfe11a565"
+      },
+      "android": {
+        "track": "internal"
+      }
     }
   }
 }
