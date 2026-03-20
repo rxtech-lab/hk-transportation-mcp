@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -5,6 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { EtaPill } from "./EtaPill";
@@ -26,6 +28,7 @@ export function ArrivalCard({
   lastRefreshedAt,
   onRefresh,
   isRefreshing,
+  onHeaderPress,
 }: {
   data: DisplayArrivalsInput;
   onLocationClick?: (pin: LocationPin) => void;
@@ -33,27 +36,49 @@ export function ArrivalCard({
   lastRefreshedAt?: number | null;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  onHeaderPress?: () => void;
 }) {
   const theme = useTheme();
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const prevRefreshing = useRef(isRefreshing);
+
+  useEffect(() => {
+    if (prevRefreshing.current !== isRefreshing) {
+      prevRefreshing.current = isRefreshing;
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [isRefreshing, fadeAnim]);
 
   return (
     <View style={[styles.card, { backgroundColor: theme.cardBackground }, stale && styles.stale]}>
       {/* Header: title + refresh */}
       {(data.title || onRefresh) && (
         <View style={[styles.header, { borderBottomColor: theme.separator }]}>
-          <View style={styles.headerTop}>
+          <Pressable
+            style={styles.headerTop}
+            onPress={onHeaderPress}
+            disabled={!onHeaderPress}
+          >
             {data.title ? (
               <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>
                 {data.title}
               </Text>
             ) : null}
-          </View>
+            {onHeaderPress && (
+              <Ionicons name="expand-outline" size={16} color={theme.chevronColor} />
+            )}
+          </Pressable>
           {onRefresh && (
             <View style={styles.refreshRow}>
               {lastRefreshedAt ? (
-                <Text style={[styles.refreshTime, { color: theme.chevronColor }]}>
+                <Animated.Text style={[styles.refreshTime, { color: theme.chevronColor, opacity: fadeAnim }]}>
                   Updated {formatTime(lastRefreshedAt)}
-                </Text>
+                </Animated.Text>
               ) : null}
               <Pressable
                 onPress={onRefresh}
@@ -64,14 +89,16 @@ export function ArrivalCard({
                   pressed && styles.refreshButtonPressed,
                 ]}
               >
-                {isRefreshing ? (
-                  <ActivityIndicator size={12} color="#007AFF" />
-                ) : (
-                  <Ionicons name="refresh" size={12} color="#007AFF" />
-                )}
-                <Text style={styles.refreshLabel}>
-                  {isRefreshing ? "Updating" : "Refresh"}
-                </Text>
+                <Animated.View style={[styles.refreshIconWrap, { opacity: fadeAnim }]}>
+                  {isRefreshing ? (
+                    <ActivityIndicator size="small" color="#007AFF" style={styles.refreshSpinner} />
+                  ) : (
+                    <Ionicons name="refresh" size={12} color="#007AFF" />
+                  )}
+                  <Text style={styles.refreshLabel}>
+                    {isRefreshing ? "Updating" : "Refresh"}
+                  </Text>
+                </Animated.View>
               </Pressable>
             </View>
           )}
@@ -197,9 +224,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.08,
   },
   refreshButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 12,
@@ -207,6 +231,16 @@ const styles = StyleSheet.create({
   },
   refreshButtonPressed: {
     backgroundColor: "rgba(0,122,255,0.24)",
+  },
+  refreshIconWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  refreshSpinner: {
+    transform: [{ scale: 0.6 }],
+    width: 12,
+    height: 12,
   },
   refreshLabel: {
     fontSize: 12,

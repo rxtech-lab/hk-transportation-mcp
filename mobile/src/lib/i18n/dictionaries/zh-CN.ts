@@ -2,7 +2,7 @@ export default {
   landing: {
     title: "香港交通",
     subtitle: "查询巴士路线、附近站点及实时到站时间",
-    suggestions: ["附近巴士站", "968号线往元朗", "101号线时刻表"],
+    suggestions: ["附近巴士站", "968号线往元朗", "101红隧时刻表"],
     continueChat: "继续上次对话",
     greetingMorning: "早上好",
     greetingAfternoon: "下午好",
@@ -19,9 +19,18 @@ export default {
     stops: "站",
     route: "路线",
     routes: "路线",
+    locationDenied: "位置服务已关闭",
+    locationSettings: "打开设置",
   },
   map: {
     title: "地图",
+  },
+  settings: {
+    language: "语言",
+    location: "位置服务",
+    locationOn: "已开启",
+    locationOff: "已关闭",
+    locationNotSet: "未设置",
   },
   tabs: {
     transport: "交通",

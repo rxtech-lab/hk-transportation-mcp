@@ -1,8 +1,10 @@
 import { Stack } from "expo-router";
 import { useTheme } from "@/hooks/use-theme";
+import { useI18n } from "@/lib/i18n/i18n-provider";
 
 export default function SettingsLayout() {
   const theme = useTheme();
+  const { dict } = useI18n();
 
   return (
     <Stack
@@ -13,8 +15,8 @@ export default function SettingsLayout() {
         contentStyle: { backgroundColor: theme.backgroundSecondary },
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Settings" }} />
-      <Stack.Screen name="language" options={{ title: "Language" }} />
+      <Stack.Screen name="index" options={{ title: dict.tabs.settings, headerShadowVisible: false }} />
+      <Stack.Screen name="language" options={{ title: dict.settings.language, headerShadowVisible: false }} />
     </Stack>
   );
 }

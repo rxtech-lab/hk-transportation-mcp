@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { LocationPin } from "@/lib/types";
+import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
 
 export interface MapScreenData {
   mapData: { stops: any[]; routes: any[] };
@@ -13,4 +13,20 @@ export const MapDataContext = createContext<{
 }>({
   data: { mapData: { stops: [], routes: [] }, userLocation: null, selectedPin: null },
   setData: () => {},
+});
+
+export interface ArrivalsSheetData {
+  data: DisplayArrivalsInput;
+  onLocationClick?: (pin: LocationPin) => void;
+  lastRefreshedAt?: number | null;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+}
+
+export const ArrivalsSheetContext = createContext<{
+  sheetData: ArrivalsSheetData | null;
+  setSheetData: (data: ArrivalsSheetData | null) => void;
+}>({
+  sheetData: null,
+  setSheetData: () => {},
 });

@@ -27,6 +27,15 @@ export interface Dictionary {
     readonly stops: string;
     readonly route: string;
     readonly routes: string;
+    readonly locationDenied: string;
+    readonly locationSettings: string;
+  };
+  settings: {
+    readonly language: string;
+    readonly location: string;
+    readonly locationOn: string;
+    readonly locationOff: string;
+    readonly locationNotSet: string;
   };
   map: {
     readonly title: string;

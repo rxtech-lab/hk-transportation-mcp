@@ -2,7 +2,7 @@ export default {
   landing: {
     title: "HK Transportation",
     subtitle: "Ask about bus routes, nearby stops, and real-time arrival times",
-    suggestions: ["Buses near me", "Route 968 to Yuen Long", "Route 101 schedule"],
+    suggestions: ["Buses near me", "Route 968 to Yuen Long", "101 Cross Harbour Tunnel timetable"],
     continueChat: "Continue previous chat",
     greetingMorning: "Good Morning",
     greetingAfternoon: "Good Afternoon",
@@ -19,9 +19,18 @@ export default {
     stops: "stops",
     route: "route",
     routes: "routes",
+    locationDenied: "Location access is off",
+    locationSettings: "Open Settings",
   },
   map: {
     title: "Map",
+  },
+  settings: {
+    language: "Language",
+    location: "Location",
+    locationOn: "On",
+    locationOff: "Off",
+    locationNotSet: "Not Set",
   },
   tabs: {
     transport: "Transport",

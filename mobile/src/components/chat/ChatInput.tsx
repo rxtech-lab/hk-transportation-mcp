@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { View, TextInput, Pressable, StyleSheet } from "react-native";
+import { View, TextInput, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/use-theme";
@@ -41,28 +41,34 @@ export function ChatInput({
           onChangeText={setText}
           onSubmitEditing={handleSend}
           multiline
-          numberOfLines={compact ? 1 : 4}
           maxLength={2000}
           returnKeyType="send"
           editable={!disabled}
           textAlignVertical={compact ? "center" : "top"}
         />
-        <Pressable
-          onPress={handleSend}
-          disabled={!canSend}
-          style={({ pressed }) => [
-            styles.sendButton,
-            canSend ? styles.sendActive : { backgroundColor: theme.inputBackground },
-            pressed && canSend && styles.sendPressed,
-          ]}
-          hitSlop={8}
-        >
-          <Ionicons
-            name="arrow-up"
-            size={18}
-            color={canSend ? "#fff" : theme.textTertiary}
-          />
-        </Pressable>
+        {disabled ? (
+          <View style={[styles.sendButton, styles.sendLoading, compact && styles.sendButtonCompact]}>
+            <ActivityIndicator size="small" color={theme.textTertiary} />
+          </View>
+        ) : (
+          <Pressable
+            onPress={handleSend}
+            disabled={!canSend}
+            style={({ pressed }) => [
+              styles.sendButton,
+              compact && styles.sendButtonCompact,
+              canSend ? styles.sendActive : { backgroundColor: theme.inputBackground },
+              pressed && canSend && styles.sendPressed,
+            ]}
+            hitSlop={8}
+          >
+            <Ionicons
+              name="arrow-up"
+              size={18}
+              color={canSend ? "#fff" : theme.textTertiary}
+            />
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -82,7 +88,12 @@ const styles = StyleSheet.create({
     flexDirection: "column",
   },
   inputWrapperCompact: {
+    flexDirection: "row",
+    alignItems: "flex-end",
     borderRadius: 22,
+    paddingVertical: 6,
+    paddingLeft: 16,
+    paddingRight: 6,
   },
   input: {
     fontSize: 17,
@@ -91,8 +102,11 @@ const styles = StyleSheet.create({
     maxHeight: 160,
   },
   inputCompact: {
+    flex: 1,
     minHeight: 22,
     maxHeight: 66,
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   sendButton: {
     width: 32,
@@ -103,8 +117,15 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     marginTop: 4,
   },
+  sendButtonCompact: {
+    marginTop: 0,
+    marginLeft: 6,
+  },
   sendActive: {
     backgroundColor: "#007AFF",
+  },
+  sendLoading: {
+    backgroundColor: "rgba(120,120,128,0.24)",
   },
   sendPressed: {
     opacity: 0.7,
