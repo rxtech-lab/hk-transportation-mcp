@@ -18,26 +18,30 @@
       },
       "env": {
         "EXPO_PUBLIC_FRONTEND_URL": "https://hk.transportation.rxlab.app",
-        "EXPO_PUBLIC_BACKEND_URL": "https://hk.transport.mcprouter.app/mcp"
+        "EXPO_PUBLIC_BACKEND_URL": "https://hk.transport.mcprouter.app"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_FRONTEND_URL": "https://hk.transportation.rxlab.app",
-        "EXPO_PUBLIC_BACKEND_URL": "https://hk.transport.mcprouter.app/mcp"
+        "EXPO_PUBLIC_BACKEND_URL": "https://hk.transport.mcprouter.app"
       }
     }
   },
   "submit": {
     "production": {
-      "ios": {},
+      "ios": {
+        "ascAppId": "6760834137"
+      },
       "android": {
-        "track": "internal"
+        "track": "production"
       }
     },
     "preview": {
-      "ios": {},
+      "ios": {
+        "ascAppId": "6760834137"
+      },
       "android": {
         "track": "internal"
       }

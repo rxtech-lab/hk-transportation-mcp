@@ -148,6 +148,54 @@ func (s *NearbyArrivalsService) fetchETACached(ctx context.Context, stop models.
 	return nil
 }
 
+// ExecuteByStopID fetches ETAs for a single stop looked up by its ID.
+func (s *NearbyArrivalsService) ExecuteByStopID(ctx context.Context, stopID string) (*NearbyStopArrivals, error) {
+	stop, ok := s.index.GetStop(stopID)
+	if !ok {
+		return nil, nil
+	}
+
+	routeIDs := s.index.RoutesForStop(stop.StopID)
+	if len(routeIDs) == 0 {
+		return &NearbyStopArrivals{StopID: stop.StopID, StopName: stop.NameEn, Lat: stop.Lat, Lon: stop.Lon}, nil
+	}
+
+	routeNames := make(map[string]struct{})
+	for _, rid := range routeIDs {
+		routeStops := s.index.StopsForRoute(rid)
+		for _, rs := range routeStops {
+			if rs.StopID == stop.StopID {
+				routeNames[extractRouteName(rid)] = struct{}{}
+				break
+			}
+		}
+	}
+
+	var arrivals []models.ETAArrival
+	for routeName := range routeNames {
+		etas := s.fetchETACached(ctx, stop, routeName)
+		arrivals = append(arrivals, etas...)
+	}
+
+	sort.Slice(arrivals, func(i, j int) bool {
+		if arrivals[i].ETA == nil {
+			return false
+		}
+		if arrivals[j].ETA == nil {
+			return true
+		}
+		return arrivals[i].ETA.Before(*arrivals[j].ETA)
+	})
+
+	return &NearbyStopArrivals{
+		StopID:   stop.StopID,
+		StopName: stop.NameEn,
+		Lat:      stop.Lat,
+		Lon:      stop.Lon,
+		Arrivals: arrivals,
+	}, nil
+}
+
 // extractRouteName extracts the route name from a route ID like "KMB-1A-O-1" → "1A"
 func extractRouteName(routeID string) string {
 	// Format: OPERATOR-ROUTE-BOUND-SERVICETYPE

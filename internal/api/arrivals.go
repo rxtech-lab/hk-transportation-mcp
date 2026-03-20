@@ -1,0 +1,198 @@
+package api
+
+import (
+	"encoding/json"
+	"log"
+	"math"
+	"net/http"
+	"time"
+
+	"github.com/rxtech-lab/hk-transportation-mcp/internal/service"
+)
+
+type stopRequest struct {
+	ID     *string  `json:"id"`
+	Lat    float64  `json:"lat"`
+	Lng    float64  `json:"lng"`
+	Routes []string `json:"routes,omitempty"` // optional: filter to these routes only
+}
+
+type arrivalsRequest struct {
+	Stops []stopRequest `json:"stops"`
+}
+
+type etaResponse struct {
+	Minutes int    `json:"minutes"`
+	Remarks string `json:"remarks,omitempty"`
+}
+
+type arrivalResponse struct {
+	Route       string        `json:"route"`
+	Destination string        `json:"destination"`
+	Etas        []etaResponse `json:"etas"`
+}
+
+type stopResponse struct {
+	ID       string            `json:"id"`
+	Name     string            `json:"name"`
+	Lat      float64           `json:"lat"`
+	Lng      float64           `json:"lng"`
+	Arrivals []arrivalResponse `json:"arrivals"`
+}
+
+type arrivalsResponse struct {
+	Stops []stopResponse `json:"stops"`
+}
+
+// ArrivalsHandler returns an http.HandlerFunc that serves the /api/arrivals endpoint.
+// Supports two modes:
+//   - By location: provide lat/lng (and optional id to filter the matched stop)
+//   - By stop ID: provide id only (lat/lng can be 0); the stop is looked up directly
+//
+// Optional "routes" array filters arrivals to only the specified route names.
+func ArrivalsHandler(nearbyService *service.NearbyArrivalsService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// CORS
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		log.Printf("[/api/arrivals] %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req arrivalsRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+			return
+		}
+		if len(req.Stops) == 0 {
+			http.Error(w, `{"error":"stops array required"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Log incoming request
+		for i, s := range req.Stops {
+			id := "<none>"
+			if s.ID != nil {
+				id = *s.ID
+			}
+			log.Printf("[/api/arrivals] stop[%d]: id=%s lat=%.6f lng=%.6f routes=%v", i, id, s.Lat, s.Lng, s.Routes)
+		}
+
+		now := time.Now()
+		respStops := make([]stopResponse, 0)
+
+		for _, s := range req.Stops {
+			hasCoords := s.Lat != 0 || s.Lng != 0
+			hasID := s.ID != nil && *s.ID != ""
+
+			if !hasCoords && !hasID {
+				continue
+			}
+
+			var matched *service.NearbyStopArrivals
+
+			if hasID && !hasCoords {
+				// Fetch by stop ID directly
+				stopArrivals, err := nearbyService.ExecuteByStopID(r.Context(), *s.ID)
+				if err != nil || stopArrivals == nil {
+					continue
+				}
+				matched = stopArrivals
+			} else {
+				// Fetch by lat/lng
+				result, err := nearbyService.Execute(r.Context(), s.Lat, s.Lng, 50)
+				if err != nil {
+					log.Printf("[/api/arrivals] Execute error: %v", err)
+					continue
+				}
+				log.Printf("[/api/arrivals] nearby found %d stops for (%.6f, %.6f)", len(result.Stops), s.Lat, s.Lng)
+				for j, rs := range result.Stops {
+					log.Printf("[/api/arrivals]   stop[%d]: %s %q arrivals=%d", j, rs.StopID, rs.StopName, len(rs.Arrivals))
+				}
+				if len(result.Stops) == 0 {
+					continue
+				}
+				if hasID {
+					for i := range result.Stops {
+						if result.Stops[i].StopID == *s.ID {
+							matched = &result.Stops[i]
+							break
+						}
+					}
+				}
+				if matched == nil {
+					matched = &result.Stops[0]
+				}
+			}
+
+			// Build route filter set
+			var routeFilter map[string]struct{}
+			if len(s.Routes) > 0 {
+				routeFilter = make(map[string]struct{}, len(s.Routes))
+				for _, r := range s.Routes {
+					routeFilter[r] = struct{}{}
+				}
+			}
+
+			// Group arrivals by route
+			routeMap := make(map[string]*arrivalResponse)
+			var routeOrder []string
+			for _, a := range matched.Arrivals {
+				if routeFilter != nil {
+					if _, ok := routeFilter[a.Route]; !ok {
+						continue
+					}
+				}
+				existing, ok := routeMap[a.Route]
+				if !ok {
+					existing = &arrivalResponse{
+						Route:       a.Route,
+						Destination: a.Destination,
+					}
+					if existing.Destination == "" {
+						existing.Destination = a.Direction
+					}
+					routeMap[a.Route] = existing
+					routeOrder = append(routeOrder, a.Route)
+				}
+				minutes := 0
+				if a.ETA != nil {
+					minutes = int(math.Max(0, math.Round(a.ETA.Sub(now).Minutes())))
+				}
+				existing.Etas = append(existing.Etas, etaResponse{
+					Minutes: minutes,
+					Remarks: a.Remark,
+				})
+			}
+
+			arrivals := make([]arrivalResponse, 0, len(routeOrder))
+			for _, route := range routeOrder {
+				resp := *routeMap[route]
+				if resp.Etas == nil {
+					resp.Etas = []etaResponse{}
+				}
+				arrivals = append(arrivals, resp)
+			}
+
+			respStops = append(respStops, stopResponse{
+				ID:       matched.StopID,
+				Name:     matched.StopName,
+				Lat:      matched.Lat,
+				Lng:      matched.Lon,
+				Arrivals: arrivals,
+			})
+		}
+
+		log.Printf("[/api/arrivals] returning %d stops in %s", len(respStops), time.Since(now))
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(arrivalsResponse{Stops: respStops})
+	}
+}

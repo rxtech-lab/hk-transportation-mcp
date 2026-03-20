@@ -11,6 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/rxtech-lab/hk-transportation-mcp/internal/api"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/auth"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/busapi"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/cache"
@@ -145,6 +146,7 @@ func main() {
 		mux.Handle("/webhook/whatsapp", waHandler)
 		log.Println("WhatsApp chatbot enabled")
 	}
+	mux.HandleFunc("/api/arrivals", api.ArrivalsHandler(nearbyService))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
