@@ -1,5 +1,11 @@
 import { useState, useCallback } from "react";
-import { View, TextInput, Pressable, StyleSheet, ActivityIndicator } from "react-native";
+import {
+  View,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/use-theme";
@@ -31,10 +37,21 @@ export function ChatInput({
   const canSend = text.trim().length > 0 && !disabled;
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.inputWrapper, { backgroundColor: theme.inputBackground }, compact && styles.inputWrapperCompact]}>
+    <View style={[styles.container, compact && styles.containerCompact]}>
+      <View
+        style={[
+          styles.inputWrapper,
+          { backgroundColor: theme.inputBackground },
+          compact && styles.inputWrapperCompact,
+        ]}
+      >
         <TextInput
-          style={[styles.input, { color: theme.text }, compact && styles.inputCompact]}
+          testID="chat-input-box"
+          style={[
+            styles.input,
+            { color: theme.text },
+            compact && styles.inputCompact,
+          ]}
           placeholder={placeholder}
           placeholderTextColor={theme.textTertiary}
           value={text}
@@ -47,17 +64,26 @@ export function ChatInput({
           textAlignVertical={compact ? "center" : "top"}
         />
         {disabled ? (
-          <View style={[styles.sendButton, styles.sendLoading, compact && styles.sendButtonCompact]}>
+          <View
+            style={[
+              styles.sendButton,
+              styles.sendLoading,
+              compact && styles.sendButtonCompact,
+            ]}
+          >
             <ActivityIndicator size="small" color={theme.textTertiary} />
           </View>
         ) : (
           <Pressable
             onPress={handleSend}
             disabled={!canSend}
+            testID="send-btn"
             style={({ pressed }) => [
               styles.sendButton,
               compact && styles.sendButtonCompact,
-              canSend ? styles.sendActive : { backgroundColor: theme.inputBackground },
+              canSend
+                ? styles.sendActive
+                : { backgroundColor: theme.inputBackground },
               pressed && canSend && styles.sendPressed,
             ]}
             hitSlop={8}
@@ -79,6 +105,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
+  containerCompact: {
+    paddingTop: 4,
+    paddingBottom: 0,
+    paddingHorizontal: 10,
+  },
   inputWrapper: {
     borderRadius: 20,
     paddingHorizontal: 16,
@@ -89,7 +120,7 @@ const styles = StyleSheet.create({
   },
   inputWrapperCompact: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     borderRadius: 22,
     paddingVertical: 6,
     paddingLeft: 16,

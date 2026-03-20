@@ -1,0 +1,13 @@
+appId: com.rxlab.hktransport
+---
+# Test: App launches and landing screen is visible
+- launchApp:
+    permissions:
+      all: allow
+
+# Navigate to History tab
+- tapOn: "History"
+- assertVisible: "Chat History"
+
+# Navigate to Settings tab
+- tapOn: "Settings"
