@@ -31,17 +31,13 @@
   },
   "submit": {
     "production": {
-      "ios": {
-        "ascAppId": "dbeec49c-a9e7-4478-b52e-bb9bfe11a565"
-      },
+      "ios": {},
       "android": {
-        "track": "production"
+        "track": "internal"
       }
     },
     "preview": {
-      "ios": {
-        "ascAppId": "dbeec49c-a9e7-4478-b52e-bb9bfe11a565"
-      },
+      "ios": {},
       "android": {
         "track": "internal"
       }
