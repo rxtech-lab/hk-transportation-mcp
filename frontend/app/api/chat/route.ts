@@ -9,6 +9,7 @@ import { AI_MODEL } from "@/lib/config";
 import { getMCPClient, resetMCPClient } from "@/lib/mcp-client";
 import { displayArrivalsTool } from "@/lib/tools/display-arrivals";
 import { getUserLocationTool } from "@/lib/tools/get-user-location";
+import { showLiveActivityTool } from "@/lib/tools/show-live-activity";
 
 async function isHongKongTransportationQuery(
   modelMessages: Awaited<ReturnType<typeof convertToModelMessages>>,
@@ -61,12 +62,23 @@ export async function POST(req: Request) {
       );
     }
 
+    const capabilities = new URL(req.url).searchParams.getAll("capabilities");
+    const hasLiveActivity = capabilities.includes("liveActivity");
+
     const mcpClient = await getMCPClient();
     const tools = await mcpClient.tools();
 
+    const clientTools: Record<string, typeof displayArrivalsTool | typeof getUserLocationTool | typeof showLiveActivityTool> = {
+      display_arrivals: displayArrivalsTool,
+      get_user_location: getUserLocationTool,
+    };
+    if (hasLiveActivity) {
+      clientTools.show_live_activity = showLiveActivityTool;
+    }
+
     const result = streamText({
       model: AI_MODEL,
-      tools: { ...tools, display_arrivals: displayArrivalsTool, get_user_location: getUserLocationTool },
+      tools: { ...tools, ...clientTools },
       messages: modelMessages,
       stopWhen: stepCountIs(20),
       system: `You are an HK bus transportation assistant. Help users find bus routes, nearby stops, and arrival times in Hong Kong.
@@ -86,7 +98,9 @@ IMPORTANT: After you receive arrival/ETA data from MCP tools (e.g. nearby_arriva
 
 For the "destination" field in each arrival: use the destination name from the MCP response if available. If only a direction like "I"/"O" or "inbound"/"outbound" is provided, use that. If no destination info is available, use an empty string.
 
-CRITICAL: Every stop in display_arrivals MUST have an "id" field set to the stop_id from the MCP response (e.g. "KMB-ABC123"). The stop_id is found in each stop object returned by MCP tools. Without it, real-time auto-refresh will not work. Never omit the id field.`,
+CRITICAL: Every stop in display_arrivals MUST have an "id" field set to the stop_id from the MCP response (e.g. "KMB-ABC123"). The stop_id is found in each stop object returned by MCP tools. Without it, real-time auto-refresh will not work. Never omit the id field.${hasLiveActivity ? `
+
+After showing arrival data for a specific route, proactively ask the user if they'd like to track the bus on their Lock Screen. If the user agrees, call show_live_activity with the route details including the route number, stop name, stop ID, destination, and current ETAs.` : ""}`,
     });
 
     return result.toUIMessageStreamResponse();
