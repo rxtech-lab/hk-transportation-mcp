@@ -83,7 +83,7 @@ func main() {
 	overpass := osm.NewOverpassClient(httpClient, redisCache)
 
 	nearbyService := service.NewNearbyArrivalsService(index, clients, redisCache)
-	routeService := service.NewRouteArrivalsService(index, clients, redisCache)
+	routeService := service.NewRouteArrivalsService(index, clients, redisCache, overpass)
 	searchService := service.NewSearchLocationService(index, nominatim, overpass)
 
 	// Create MCP server

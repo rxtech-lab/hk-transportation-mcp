@@ -44,6 +44,89 @@ type overpassElement struct {
 	Tags map[string]string `json:"tags"`
 }
 
+// OverpassRoute represents a bus route found via Overpass API.
+type OverpassRoute struct {
+	Ref      string `json:"ref"`      // Route number (e.g., "960", "1A")
+	Name     string `json:"name"`     // Full route name
+	Operator string `json:"operator"` // Bus operator
+}
+
+// FindBusRoutesNear queries Overpass for bus route relations that pass through
+// stops near the given coordinates. Returns up to maxRoutes unique route references.
+func (o *OverpassClient) FindBusRoutesNear(ctx context.Context, lat, lon float64, radiusM, maxRoutes int) ([]OverpassRoute, error) {
+	if radiusM <= 0 {
+		radiusM = 500
+	}
+	if maxRoutes <= 0 {
+		maxRoutes = 5
+	}
+
+	cacheKey := fmt.Sprintf("overpass:routes:%.5f:%.5f:%d", lat, lon, radiusM)
+	if o.cache != nil {
+		if routes, ok, err := cache.GetJSON[[]OverpassRoute](ctx, o.cache, cacheKey); err == nil && ok {
+			return routes, nil
+		}
+	}
+
+	query := fmt.Sprintf(`[out:json][timeout:15];
+(
+  node["highway"="bus_stop"](around:%d,%f,%f);
+  node["public_transport"="platform"]["bus"="yes"](around:%d,%f,%f);
+  node["public_transport"="stop_position"]["bus"="yes"](around:%d,%f,%f);
+)->.nearby;
+rel(bn.nearby)["type"="route"]["route"="bus"];
+out tags;`, radiusM, lat, lon, radiusM, lat, lon, radiusM, lat, lon)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, overpassURL, strings.NewReader("data="+query))
+	if err != nil {
+		return nil, fmt.Errorf("overpass: create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := o.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("overpass: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("overpass: unexpected status %d", resp.StatusCode)
+	}
+
+	var result overpassResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("overpass: decode response: %w", err)
+	}
+
+	var routes []OverpassRoute
+	seen := make(map[string]struct{})
+	for _, el := range result.Elements {
+		ref := el.Tags["ref"]
+		if ref == "" {
+			continue
+		}
+		if _, ok := seen[ref]; ok {
+			continue
+		}
+		seen[ref] = struct{}{}
+		routes = append(routes, OverpassRoute{
+			Ref:      ref,
+			Name:     el.Tags["name"],
+			Operator: el.Tags["operator"],
+		})
+		if len(routes) >= maxRoutes {
+			break
+		}
+	}
+
+	if o.cache != nil {
+		_ = cache.SetJSON(ctx, o.cache, cacheKey, routes, overpassCacheTTL)
+	}
+
+	return routes, nil
+}
+
 // FindNearbyStops queries Overpass for bus stops near the given coordinates.
 func (o *OverpassClient) FindNearbyStops(ctx context.Context, lat, lon float64, radiusM int) ([]models.BusStop, error) {
 	if radiusM <= 0 {
