@@ -169,6 +169,177 @@ func dedupe(ss []string) []string {
 	return result
 }
 
+// RouteIDsByName returns all route IDs whose extracted route name matches the
+// given name (e.g., "960" matches "KMB-960-O-1", "CTB-960-I-1", etc.).
+func (idx *StopIndex) RouteIDsByName(routeName string) []string {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	var ids []string
+	for routeID := range idx.routeStops {
+		name := extractRouteNameFromID(routeID)
+		if name == routeName {
+			ids = append(ids, routeID)
+		}
+	}
+	return ids
+}
+
+// extractRouteNameFromID extracts the route name from a route ID like "KMB-1A-O-1" → "1A".
+func extractRouteNameFromID(routeID string) string {
+	parts := splitID(routeID)
+	if len(parts) >= 2 {
+		return parts[1]
+	}
+	return routeID
+}
+
+func splitID(routeID string) []string {
+	var parts []string
+	start := 0
+	for i, c := range routeID {
+		if c == '-' {
+			parts = append(parts, routeID[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, routeID[start:])
+	return parts
+}
+
+// FindTransferRoutesInMemory finds transfer routes between origin and destination
+// stops using only in-memory data (no pgRouting). Supports single-transfer routes.
+// additionalRouteIDs are extra route IDs (e.g., from Overpass) to include in the search.
+func (idx *StopIndex) FindTransferRoutesInMemory(
+	originStopIDs, destStopIDs []string,
+	additionalOriginRouteIDs, additionalDestRouteIDs []string,
+	maxResults int,
+) []TransferResult {
+	if maxResults <= 0 {
+		maxResults = 10
+	}
+
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	type stopSeq struct {
+		stopID string
+		seq    int
+	}
+
+	// Build origin route info: routeID → earliest (stopID, seq) near origin
+	originRoutes := make(map[string]stopSeq)
+	for _, stopID := range originStopIDs {
+		for _, routeID := range idx.stopRoutes[stopID] {
+			for _, rs := range idx.routeStops[routeID] {
+				if rs.StopID == stopID {
+					if existing, ok := originRoutes[routeID]; !ok || rs.StopSeq < existing.seq {
+						originRoutes[routeID] = stopSeq{stopID, rs.StopSeq}
+					}
+				}
+			}
+		}
+	}
+
+	// Add additional origin route IDs — find the stop on each route closest to any origin stop
+	for _, routeID := range additionalOriginRouteIDs {
+		if _, ok := originRoutes[routeID]; ok {
+			continue
+		}
+		stops := idx.routeStops[routeID]
+		for _, rs := range stops {
+			for _, oid := range originStopIDs {
+				if rs.StopID == oid {
+					if existing, ok := originRoutes[routeID]; !ok || rs.StopSeq < existing.seq {
+						originRoutes[routeID] = stopSeq{rs.StopID, rs.StopSeq}
+					}
+				}
+			}
+		}
+	}
+
+	// Build dest route info: routeID → latest (stopID, seq) near dest
+	destRoutes := make(map[string]stopSeq)
+	for _, stopID := range destStopIDs {
+		for _, routeID := range idx.stopRoutes[stopID] {
+			for _, rs := range idx.routeStops[routeID] {
+				if rs.StopID == stopID {
+					if existing, ok := destRoutes[routeID]; !ok || rs.StopSeq > existing.seq {
+						destRoutes[routeID] = stopSeq{stopID, rs.StopSeq}
+					}
+				}
+			}
+		}
+	}
+
+	// Add additional dest route IDs
+	for _, routeID := range additionalDestRouteIDs {
+		if _, ok := destRoutes[routeID]; ok {
+			continue
+		}
+		stops := idx.routeStops[routeID]
+		for _, rs := range stops {
+			for _, did := range destStopIDs {
+				if rs.StopID == did {
+					if existing, ok := destRoutes[routeID]; !ok || rs.StopSeq > existing.seq {
+						destRoutes[routeID] = stopSeq{rs.StopID, rs.StopSeq}
+					}
+				}
+			}
+		}
+	}
+
+	// Find single-transfer routes: R1[origin→transfer] + R2[transfer→dest]
+	var results []TransferResult
+	seen := make(map[string]struct{})
+
+	for r1, originInfo := range originRoutes {
+		stopsOnR1 := idx.routeStops[r1]
+		for _, rs := range stopsOnR1 {
+			if rs.StopSeq <= originInfo.seq {
+				continue
+			}
+			// rs.StopID is a potential transfer point
+			for _, r2 := range idx.stopRoutes[rs.StopID] {
+				destInfo, ok := destRoutes[r2]
+				if !ok {
+					continue
+				}
+				// Find transfer stop's seq on R2
+				var transferSeqOnR2 int
+				found := false
+				for _, rs2 := range idx.routeStops[r2] {
+					if rs2.StopID == rs.StopID {
+						transferSeqOnR2 = rs2.StopSeq
+						found = true
+						break
+					}
+				}
+				if !found || transferSeqOnR2 >= destInfo.seq {
+					continue
+				}
+
+				legs := []TransferLeg{
+					{RouteID: r1, BoardStopID: originInfo.stopID, AlightStopID: rs.StopID},
+					{RouteID: r2, BoardStopID: rs.StopID, AlightStopID: destInfo.stopID},
+				}
+
+				sig := legSignature(legs)
+				if _, ok := seen[sig]; ok {
+					continue
+				}
+				seen[sig] = struct{}{}
+
+				results = append(results, TransferResult{Legs: legs})
+				if len(results) >= maxResults {
+					return results
+				}
+			}
+		}
+	}
+
+	return results
+}
+
 // WalkRouteID is a sentinel route ID used for walking transfer edges in the
 // transit graph. When decomposePath encounters an edge with this route ID it
 // marks the resulting TransferLeg as a walking leg.

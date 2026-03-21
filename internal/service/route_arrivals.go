@@ -10,21 +10,24 @@ import (
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/cache"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/geo"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/models"
+	"github.com/rxtech-lab/hk-transportation-mcp/internal/osm"
 )
 
 // RouteArrivalsService handles the route_arrivals tool logic.
 type RouteArrivalsService struct {
-	index   *geo.StopIndex
-	clients []busapi.BusAPIClient
-	cache   *cache.Cache
+	index    *geo.StopIndex
+	clients  []busapi.BusAPIClient
+	cache    *cache.Cache
+	overpass *osm.OverpassClient
 }
 
 // NewRouteArrivalsService creates a new RouteArrivalsService.
-func NewRouteArrivalsService(index *geo.StopIndex, clients []busapi.BusAPIClient, c *cache.Cache) *RouteArrivalsService {
+func NewRouteArrivalsService(index *geo.StopIndex, clients []busapi.BusAPIClient, c *cache.Cache, overpass *osm.OverpassClient) *RouteArrivalsService {
 	return &RouteArrivalsService{
-		index:   index,
-		clients: clients,
-		cache:   c,
+		index:    index,
+		clients:  clients,
+		cache:    c,
+		overpass: overpass,
 	}
 }
 
@@ -208,6 +211,11 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 		log.Printf("transfer route search failed (origins=%d, dests=%d): %v", len(originStopIDs), len(destStopIDs), err)
 	}
 
+	// Fallback: when pgRouting returns no results, use Overpass + in-memory search
+	if len(transfers) == 0 && s.overpass != nil {
+		transfers = s.findTransferRoutesViaOverpass(ctx, lat, lon, destLat, destLon, originStopIDs, destStopIDs)
+	}
+
 	for _, t := range transfers {
 		var legs []TransferRouteLeg
 		valid := true
@@ -280,4 +288,59 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 		CandidateRoutes: results,
 		TransferRoutes:  transferRoutes,
 	}, nil
+}
+
+// findTransferRoutesViaOverpass uses the Overpass API to discover bus routes
+// near origin and destination, then performs an in-memory transfer search and
+// returns the results as geo.TransferResult slices.
+func (s *RouteArrivalsService) findTransferRoutesViaOverpass(
+	ctx context.Context,
+	originLat, originLon, destLat, destLon float64,
+	originStopIDs, destStopIDs []string,
+) []geo.TransferResult {
+	// Query Overpass for bus routes near origin and destination concurrently
+	type routeResult struct {
+		routes []osm.OverpassRoute
+		err    error
+	}
+	originCh := make(chan routeResult, 1)
+	destCh := make(chan routeResult, 1)
+
+	go func() {
+		routes, err := s.overpass.FindBusRoutesNear(ctx, originLat, originLon, 500, 5)
+		originCh <- routeResult{routes, err}
+	}()
+	go func() {
+		routes, err := s.overpass.FindBusRoutesNear(ctx, destLat, destLon, 500, 5)
+		destCh <- routeResult{routes, err}
+	}()
+
+	originResult := <-originCh
+	destResult := <-destCh
+
+	if originResult.err != nil {
+		log.Printf("overpass origin routes failed: %v", originResult.err)
+	}
+	if destResult.err != nil {
+		log.Printf("overpass dest routes failed: %v", destResult.err)
+	}
+
+	// Map Overpass route refs to local route IDs
+	var additionalOriginRouteIDs, additionalDestRouteIDs []string
+	for _, r := range originResult.routes {
+		additionalOriginRouteIDs = append(additionalOriginRouteIDs, s.index.RouteIDsByName(r.Ref)...)
+	}
+	for _, r := range destResult.routes {
+		additionalDestRouteIDs = append(additionalDestRouteIDs, s.index.RouteIDsByName(r.Ref)...)
+	}
+
+	log.Printf("overpass fallback: %d origin route refs → %d local IDs, %d dest route refs → %d local IDs",
+		len(originResult.routes), len(additionalOriginRouteIDs),
+		len(destResult.routes), len(additionalDestRouteIDs))
+
+	return s.index.FindTransferRoutesInMemory(
+		originStopIDs, destStopIDs,
+		additionalOriginRouteIDs, additionalDestRouteIDs,
+		10,
+	)
 }
