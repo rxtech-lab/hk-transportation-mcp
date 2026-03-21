@@ -1,0 +1,29 @@
+appId: com.rxlab.hktransport
+---
+- launchApp
+
+- tapOn:
+    id: chat-input-box
+    delay: 100
+
+- inputText: Bus route from Aberdeen to Causeway Bay
+
+- tapOn:
+    id: send-btn
+
+- tapOn:
+    id: back-btn
+
+- tapOn: History
+
+- tapOn:
+    id: history-session-0
+
+- tapOn:
+    id: view-map-btn
+
+- tapOn:
+    id: close-map-btn
+
+- assertVisible:
+    id: back-btn

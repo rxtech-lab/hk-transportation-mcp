@@ -5,6 +5,13 @@ import { ToolCallBadge } from "./ToolCallBadge";
 import { ArrivalCard } from "@/components/arrivals/ArrivalCard";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
 
+export interface ToolCallInfo {
+  toolName: string;
+  state: string;
+  input?: unknown;
+  output?: unknown;
+}
+
 interface AssistantMessageProps {
   message: UIMessage;
   toolPartsToRender: Set<string>;
@@ -15,6 +22,7 @@ interface AssistantMessageProps {
   onRefresh?: () => void;
   isRefreshing?: boolean;
   onArrivalsExpand?: (data: DisplayArrivalsInput) => void;
+  onToolPress?: (info: ToolCallInfo) => void;
 }
 
 export function AssistantMessage({
@@ -27,6 +35,7 @@ export function AssistantMessage({
   onRefresh,
   isRefreshing,
   onArrivalsExpand,
+  onToolPress,
 }: AssistantMessageProps) {
   return (
     <View style={styles.container}>
@@ -81,7 +90,21 @@ export function AssistantMessage({
 
           return (
             <View key={part.toolCallId} style={styles.toolRow}>
-              <ToolCallBadge toolName={toolName} state={part.state} />
+              <ToolCallBadge
+                toolName={toolName}
+                state={part.state}
+                onPress={
+                  onToolPress
+                    ? () =>
+                        onToolPress({
+                          toolName,
+                          state: part.state,
+                          input: "input" in part ? part.input : undefined,
+                          output: "output" in part ? part.output : undefined,
+                        })
+                    : undefined
+                }
+              />
             </View>
           );
         }

@@ -17,30 +17,30 @@ appId: com.rxlab.hktransport
       id: back-btn
     timeout: 20000
 
-# - tapOn:
-#     id: back-btn
+- tapOn:
+    id: back-btn
 
-# - extendedWaitUntil:
-#     visible:
-#       id: continue-btn
-#     timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: continue-btn
+    timeout: 20000
 
-# - assertVisible:
-#     id: continue-btn
+- assertVisible:
+    id: continue-btn
 
-# - tapOn:
-#     id: continue-btn
+- tapOn:
+    id: continue-btn
 
-# - tapOn:
-#     id: clear-btn
+- tapOn:
+    id: clear-btn
 
-# - assertVisible: HK Transport
+- assertVisible: HK Transport
 
-# - tapOn:
-#     id: chat-input-box
-#     delay: 100
+- tapOn:
+    id: chat-input-box
+    delay: 100
 
-# - inputText: Bus route from Aberdeen to Causeway Bay
+- inputText: Bus route from Aberdeen to Causeway Bay
 
-# - tapOn:
-#     id: send-btn
+- tapOn:
+    id: send-btn

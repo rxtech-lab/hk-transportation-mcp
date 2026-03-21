@@ -4,6 +4,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { Linking, Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useI18n, locales } from "@/lib/i18n/i18n-provider";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -11,6 +12,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { locale, dict } = useI18n();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [locationStatus, setLocationStatus] = useState<"granted" | "denied" | "undetermined">("undetermined");
 
   const checkLocationStatus = useCallback(() => {
@@ -51,8 +53,8 @@ export default function SettingsScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundSecondary }]}>
-      <View style={[styles.section, { backgroundColor: theme.backgroundElement }]}>
+    <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top + 44 }]}>
+      <View style={[styles.section, { backgroundColor: theme.backgroundSecondary }]}>
         <Pressable
           onPress={() => router.push("/settings/language")}
           style={[styles.row, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.separator }]}

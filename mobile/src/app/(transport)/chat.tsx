@@ -16,7 +16,7 @@ import {
   isToolUIPart,
 } from "ai";
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useRouter, useLocalSearchParams } from "expo-router";
+import { Stack, useRouter, useLocalSearchParams, useSegments } from "expo-router";
 
 import { ChatMessagesList } from "@/components/chat/ChatMessages";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -36,6 +36,7 @@ import { fetch as expoFetch } from "expo/fetch";
 import { FRONTEND_URL } from "@/lib/config";
 import { updateWidget } from "@/lib/widget";
 import { startTracking } from "@/lib/live-activity";
+import * as Haptics from "expo-haptics";
 import { TabBarContext } from "@/app/_layout";
 import { MapDataContext, ArrivalsSheetContext } from "./_ctx";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
@@ -47,6 +48,8 @@ export default function ChatScreen() {
     initialMessage?: string;
     sessionId?: string;
   }>();
+  const segments = useSegments();
+  const routePrefix = segments[0] === "history" ? "/history" : "/(transport)";
   const { setIsTabBarHidden } = use(TabBarContext);
   const { setData: setMapScreenData } = use(MapDataContext);
   const [arrivalsOverride, setArrivalsOverride] =
@@ -89,6 +92,13 @@ export default function ChatScreen() {
     return () => setIsTabBarHidden(false);
   }, [setIsTabBarHidden]);
 
+  // Haptic feedback when assistant starts streaming
+  useEffect(() => {
+    if (prevStatusRef.current !== "streaming" && status === "streaming") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, [status]);
+
   const {
     messages,
     sendMessage,
@@ -105,6 +115,7 @@ export default function ChatScreen() {
       fetch: expoFetch as unknown as typeof globalThis.fetch,
     }),
     onToolCall({ toolCall }) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (toolCall.toolName === "display_arrivals") {
         updateWidget(toolCall.input as DisplayArrivalsInput);
         addToolOutput({
@@ -112,6 +123,7 @@ export default function ChatScreen() {
           toolCallId: toolCall.toolCallId,
           output: "Arrival card displayed to user.",
         });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       if (toolCall.toolName === "show_live_activity") {
         const input = toolCall.input as {
@@ -129,6 +141,7 @@ export default function ChatScreen() {
               ? "Live Activity started. The user can now see real-time bus tracking on their Lock Screen and Dynamic Island."
               : "Failed to start Live Activity. The device may not support Live Activities or the user has disabled them.",
           });
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         });
       }
       if (toolCall.toolName === "get_user_location") {
@@ -142,6 +155,7 @@ export default function ChatScreen() {
               longitude: g.longitude,
             }),
           });
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } else {
           geo.request().then((coords) => {
             if (coords) {
@@ -153,6 +167,7 @@ export default function ChatScreen() {
                   longitude: coords.longitude,
                 }),
               });
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } else {
               addToolOutput({
                 tool: "get_user_location" as never,
@@ -162,6 +177,7 @@ export default function ChatScreen() {
                     "Location unavailable. The user may have denied location permission.",
                 }),
               });
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }
           });
         }
@@ -278,14 +294,14 @@ export default function ChatScreen() {
     (pin: LocationPin) => {
       setSelectedPin(pin);
       setMapScreenData({ mapData, userLocation, selectedPin: pin });
-      router.push("/(transport)/map");
+      router.push(`${routePrefix}/map` as any);
     },
     [mapData, userLocation, setMapScreenData, router],
   );
 
   const handleOpenMap = useCallback(() => {
     setMapScreenData({ mapData, userLocation, selectedPin });
-    router.push("/(transport)/map");
+    router.push(`${routePrefix}/map` as any);
   }, [mapData, userLocation, selectedPin, setMapScreenData, router]);
 
   const handleArrivalsExpand = useCallback(
@@ -297,7 +313,7 @@ export default function ChatScreen() {
         onRefresh: refetchArrivals,
         isRefreshing,
       });
-      router.push("/(transport)/arrivals");
+      router.push(`${routePrefix}/arrivals` as any);
     },
     [
       setSheetData,
@@ -424,6 +440,7 @@ export default function ChatScreen() {
         >
           <Pressable
             onPress={handleOpenMap}
+            testID="view-map-btn"
             style={[
               styles.mapButton,
               { borderBottomColor: theme.separatorLight },

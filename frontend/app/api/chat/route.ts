@@ -10,6 +10,7 @@ import { getMCPClient, resetMCPClient } from "@/lib/mcp-client";
 import { displayArrivalsTool } from "@/lib/tools/display-arrivals";
 import { getUserLocationTool } from "@/lib/tools/get-user-location";
 import { showLiveActivityTool } from "@/lib/tools/show-live-activity";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 async function isHongKongTransportationQuery(
   modelMessages: Awaited<ReturnType<typeof convertToModelMessages>>,
@@ -35,6 +36,16 @@ Return NO only for clearly unrelated topics (e.g. cooking recipes, stock prices,
 
 export async function POST(req: Request) {
   try {
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "anonymous";
+    const { success } = await checkRateLimit(ip);
+    if (!success) {
+      return Response.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 },
+      );
+    }
+
     const body = await req.json();
     console.log("[chat/route] request body keys:", Object.keys(body));
     console.log(
