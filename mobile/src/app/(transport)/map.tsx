@@ -40,6 +40,7 @@ export default function MapScreen() {
       />
       <Pressable
         onPress={() => router.back()}
+        testID="close-map-btn"
         style={[styles.closeButton, { top: insets.top + 12 }]}
       >
         <Ionicons name="close" size={22} color="#fff" />

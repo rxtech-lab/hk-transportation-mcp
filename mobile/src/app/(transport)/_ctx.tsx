@@ -30,3 +30,18 @@ export const ArrivalsSheetContext = createContext<{
   sheetData: null,
   setSheetData: () => {},
 });
+
+export interface ToolCallSheetData {
+  toolName: string;
+  state: string;
+  input?: unknown;
+  output?: unknown;
+}
+
+export const ToolCallSheetContext = createContext<{
+  toolCallData: ToolCallSheetData | null;
+  setToolCallData: (data: ToolCallSheetData | null) => void;
+}>({
+  toolCallData: null,
+  setToolCallData: () => {},
+});

@@ -8,7 +8,7 @@ export function LanguageList() {
   const theme = useTheme();
 
   return (
-    <View style={[styles.list, { backgroundColor: theme.backgroundElement }]}>
+    <View style={[styles.list, { backgroundColor: theme.backgroundSecondary }]}>
       {locales.map((item) => {
         const selected = item.code === locale;
         return (

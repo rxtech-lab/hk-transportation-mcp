@@ -45,22 +45,19 @@ export default function HistoryScreen() {
   const handleTap = useCallback(
     (session: ChatSessionMeta) => {
       router.push({
-        pathname: "/(transport)/chat",
+        pathname: "/history/chat",
         params: { sessionId: session.id },
       });
     },
     [router],
   );
 
-  const handleDelete = useCallback(
-    (id: string) => {
-      deleteSession(id);
-      setSessions((prev) => prev.filter((s) => s.id !== id));
-      swipeableRefs.current.get(id)?.close();
-      swipeableRefs.current.delete(id);
-    },
-    [],
-  );
+  const handleDelete = useCallback((id: string) => {
+    deleteSession(id);
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    swipeableRefs.current.get(id)?.close();
+    swipeableRefs.current.delete(id);
+  }, []);
 
   const renderRightActions = useCallback(
     (
@@ -77,7 +74,7 @@ export default function HistoryScreen() {
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: ChatSessionMeta }) => (
+    ({ item, index }: { item: ChatSessionMeta; index: number }) => (
       <Swipeable
         ref={(ref) => {
           if (ref) swipeableRefs.current.set(item.id, ref);
@@ -89,17 +86,30 @@ export default function HistoryScreen() {
       >
         <Pressable
           onPress={() => handleTap(item)}
+          testID={`history-session-${index}`}
           style={({ pressed }) => [
             styles.row,
-            { backgroundColor: theme.backgroundSecondary, borderBottomColor: theme.separator },
+            {
+              backgroundColor: theme.background,
+              borderBottomColor: theme.separator,
+            },
             pressed && { backgroundColor: theme.inputBackground },
           ]}
         >
-          <View style={[styles.rowIcon, { backgroundColor: theme.inputBackground }]}>
-            <Ionicons name="chatbubble-outline" size={18} color={theme.textTertiary} />
+          <View
+            style={[styles.rowIcon, { backgroundColor: theme.inputBackground }]}
+          >
+            <Ionicons
+              name="chatbubble-outline"
+              size={18}
+              color={theme.textTertiary}
+            />
           </View>
           <View style={styles.rowContent}>
-            <Text style={[styles.rowTitle, { color: theme.text }]} numberOfLines={1}>
+            <Text
+              style={[styles.rowTitle, { color: theme.text }]}
+              numberOfLines={1}
+            >
               {item.title || dict.history.untitled}
             </Text>
             <Text style={[styles.rowTime, { color: theme.textTertiary }]}>
@@ -119,9 +129,17 @@ export default function HistoryScreen() {
 
   if (sessions.length === 0) {
     return (
-      <View style={[styles.empty, { backgroundColor: theme.backgroundSecondary }]}>
-        <Ionicons name="chatbubbles-outline" size={48} color={theme.textTertiary} />
-        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>{dict.history.empty}</Text>
+      <View
+        style={[styles.empty, { backgroundColor: theme.backgroundSecondary }]}
+      >
+        <Ionicons
+          name="chatbubbles-outline"
+          size={48}
+          color={theme.textTertiary}
+        />
+        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
+          {dict.history.empty}
+        </Text>
       </View>
     );
   }
@@ -131,8 +149,11 @@ export default function HistoryScreen() {
       data={sessions}
       keyExtractor={(item) => item.id}
       renderItem={renderItem}
-      contentContainerStyle={{ paddingBottom: insets.bottom }}
-      style={[styles.list, { backgroundColor: theme.backgroundSecondary }]}
+      contentContainerStyle={{
+        paddingTop: insets.top + 44,
+        paddingBottom: insets.bottom,
+      }}
+      style={[styles.list, { backgroundColor: theme.background }]}
     />
   );
 }

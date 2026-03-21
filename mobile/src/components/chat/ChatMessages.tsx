@@ -1,8 +1,10 @@
-import { useEffect, useRef, useMemo, useCallback } from "react";
-import { View, FlatList, StyleSheet, Animated, Easing, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
+import { use, useEffect, useRef, useMemo, useCallback } from "react";
+import { FlatList, StyleSheet, View, Animated, Easing, Keyboard, Platform, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 import { isToolUIPart, type UIMessage } from "ai";
+import { useRouter, useSegments } from "expo-router";
 import { MessageBubble } from "./MessageBubble";
-import { AssistantMessage } from "./AssistantMessage";
+import { AssistantMessage, type ToolCallInfo } from "./AssistantMessage";
+import { ToolCallSheetContext } from "@/app/(transport)/_ctx";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
 
 interface ChatMessagesProps {
@@ -99,6 +101,15 @@ export function ChatMessagesList({
   const isScrollableRef = useRef(false);
   const layoutHeightRef = useRef(0);
   const hasScrolledInitialRef = useRef(false);
+  const router = useRouter();
+  const segments = useSegments();
+  const routePrefix = segments[0] === "history" ? "/history" : "/(transport)";
+  const { setToolCallData } = use(ToolCallSheetContext);
+
+  const handleToolPress = useCallback((info: ToolCallInfo) => {
+    setToolCallData(info);
+    router.push(`${routePrefix}/tool-call` as any);
+  }, [setToolCallData, router, routePrefix]);
 
   const onLayout = useCallback((e: { nativeEvent: { layout: { height: number } } }) => {
     layoutHeightRef.current = e.nativeEvent.layout.height;
@@ -197,6 +208,19 @@ export function ChatMessagesList({
     return result;
   }, [messages, isLoading]);
 
+  // Scroll to bottom when keyboard appears
+  useEffect(() => {
+    const event = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const sub = Keyboard.addListener(event, () => {
+      if (isScrollableRef.current) {
+        setTimeout(() => {
+          listRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   // Scroll to bottom when new items appear (only if scrollable and near bottom)
   useEffect(() => {
     if (items.length > 0 && isScrollableRef.current && isNearBottomRef.current) {
@@ -238,10 +262,11 @@ export function ChatMessagesList({
           onRefresh={onRefresh}
           isRefreshing={isRefreshing}
           onArrivalsExpand={onArrivalsExpand}
+          onToolPress={handleToolPress}
         />
       );
     },
-    [arrivalsData, onLocationClick, lastRefreshedAt, onRefresh, isRefreshing, onArrivalsExpand]
+    [arrivalsData, onLocationClick, lastRefreshedAt, onRefresh, isRefreshing, onArrivalsExpand, handleToolPress]
   );
 
   return (
@@ -253,7 +278,7 @@ export function ChatMessagesList({
       style={styles.container}
       contentContainerStyle={styles.content}
       contentInsetAdjustmentBehavior="automatic"
-      keyboardDismissMode="interactive"
+      keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
       onScroll={onScroll}
       onLayout={onLayout}

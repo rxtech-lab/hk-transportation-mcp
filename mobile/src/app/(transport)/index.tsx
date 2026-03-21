@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   KeyboardAvoidingView,
+  ScrollView,
   Platform,
   Keyboard,
 } from "react-native";
@@ -82,35 +83,41 @@ export default function LandingScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
     >
-      <Pressable style={styles.content} onPress={Keyboard.dismiss}>
-        <LandingHeader />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+      >
+        <Pressable onPress={Keyboard.dismiss}>
+          <LandingHeader />
 
-        {hasSession && (
-          <Pressable
-            onPress={handleContinue}
-            testID="continue-btn"
-            style={({ pressed }) => [
-              styles.continueRow,
-              { backgroundColor: theme.inputBackground },
-              pressed && styles.continueRowPressed,
-            ]}
-          >
-            <View style={styles.continueIconWrap}>
-              <Ionicons name="chatbubbles" size={16} color="#007AFF" />
-            </View>
-            <Text style={[styles.continueText, { color: theme.text }]}>
-              {dict.landing.continueChat}
-            </Text>
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={theme.chevronColor}
-            />
-          </Pressable>
-        )}
+          {hasSession && (
+            <Pressable
+              onPress={handleContinue}
+              testID="continue-btn"
+              style={({ pressed }) => [
+                styles.continueRow,
+                { backgroundColor: theme.inputBackground },
+                pressed && styles.continueRowPressed,
+              ]}
+            >
+              <View style={styles.continueIconWrap}>
+                <Ionicons name="chatbubbles" size={16} color="#007AFF" />
+              </View>
+              <Text style={[styles.continueText, { color: theme.text }]}>
+                {dict.landing.continueChat}
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={theme.chevronColor}
+              />
+            </Pressable>
+          )}
 
-        <SuggestionChips onSuggestion={handleSend} />
-      </Pressable>
+          <SuggestionChips onSuggestion={handleSend} />
+        </Pressable>
+      </ScrollView>
 
       <View
         style={[
@@ -136,7 +143,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
   },
   continueRow: {

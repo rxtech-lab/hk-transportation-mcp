@@ -9,10 +9,11 @@ export default function SettingsLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: theme.headerBackground },
+        headerStyle: { backgroundColor: "transparent" },
+        headerTransparent: true,
         headerTintColor: theme.headerTint,
         headerTitleStyle: { fontWeight: "600" },
-        contentStyle: { backgroundColor: theme.backgroundSecondary },
+        contentStyle: { backgroundColor: theme.background },
       }}
     >
       <Stack.Screen name="index" options={{ title: dict.tabs.settings, headerShadowVisible: false }} />
