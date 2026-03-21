@@ -525,6 +525,116 @@ func TestDecomposePath_WalkAtStart(t *testing.T) {
 	}
 }
 
+func TestCountBusTransfers(t *testing.T) {
+	tests := []struct {
+		name string
+		legs []TransferLeg
+		want int
+	}{
+		{"single bus", []TransferLeg{{RouteID: "R1"}}, 0},
+		{"two buses", []TransferLeg{{RouteID: "R1"}, {RouteID: "R2"}}, 1},
+		{"bus-walk-bus", []TransferLeg{
+			{RouteID: "R1"},
+			{RouteID: WalkRouteID, IsWalking: true},
+			{RouteID: "R2"},
+		}, 1},
+		{"bus-walk-bus-walk-bus (3 buses)", []TransferLeg{
+			{RouteID: "R1"},
+			{RouteID: WalkRouteID, IsWalking: true},
+			{RouteID: "R2"},
+			{RouteID: WalkRouteID, IsWalking: true},
+			{RouteID: "R3"},
+		}, 2},
+		{"bus-walk-bus-walk-bus-walk-bus (4 buses)", []TransferLeg{
+			{RouteID: "R1"},
+			{RouteID: WalkRouteID, IsWalking: true},
+			{RouteID: "R2"},
+			{RouteID: WalkRouteID, IsWalking: true},
+			{RouteID: "R3"},
+			{RouteID: WalkRouteID, IsWalking: true},
+			{RouteID: "R4"},
+		}, 3},
+		{"empty", []TransferLeg{}, 0},
+		{"only walks", []TransferLeg{
+			{RouteID: WalkRouteID, IsWalking: true},
+			{RouteID: WalkRouteID, IsWalking: true},
+		}, 0},
+		{"walk-bus-walk-bus", []TransferLeg{
+			{RouteID: WalkRouteID, IsWalking: true},
+			{RouteID: "R1"},
+			{RouteID: WalkRouteID, IsWalking: true},
+			{RouteID: "R2"},
+		}, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := countBusTransfers(tt.legs)
+			if got != tt.want {
+				t.Errorf("countBusTransfers() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFindTransferRoutes_WalkingLegsNotCountedAsTransfers(t *testing.T) {
+	// A 3-bus route with walking legs: bus→walk→bus→walk→bus = 5 legs
+	// Old bug: len(legs)-1 = 4 "transfers" → filtered out by maxTransfers=2
+	// Fix: countBusTransfers = 2 → allowed with maxTransfers=2
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	idx := NewStopIndex(db)
+	idx.Reload([]models.BusStop{
+		{StopID: "S1", NameEn: "A", Lat: 22.30, Lon: 114.17, Operator: "KMB"},
+		{StopID: "S2", NameEn: "B", Lat: 22.31, Lon: 114.18, Operator: "KMB"},
+		{StopID: "S3", NameEn: "C", Lat: 22.31, Lon: 114.18, Operator: "CTB"},
+		{StopID: "S4", NameEn: "D", Lat: 22.32, Lon: 114.19, Operator: "CTB"},
+		{StopID: "S5", NameEn: "E", Lat: 22.32, Lon: 114.19, Operator: "KMB"},
+		{StopID: "S6", NameEn: "F", Lat: 22.33, Lon: 114.20, Operator: "KMB"},
+	}, nil)
+
+	mock.ExpectQuery("SELECT node_id FROM transit_node_map").
+		WillReturnRows(sqlmock.NewRows([]string{"node_id"}).AddRow(1))
+	mock.ExpectQuery("SELECT node_id FROM transit_node_map").
+		WillReturnRows(sqlmock.NewRows([]string{"node_id"}).AddRow(6))
+
+	// Path: S1→S2 (R1), S2→S3 (WALK), S3→S4 (R2), S4→S5 (WALK), S5→S6 (R3)
+	mock.ExpectQuery("pgr_dijkstra").WillReturnRows(
+		sqlmock.NewRows([]string{
+			"path_seq", "start_vid", "end_vid", "node", "edge", "agg_cost", "stop_id", "route_id",
+		}).
+			AddRow(1, 1, 6, 1, 101, 0.0, "S1", "R1").
+			AddRow(2, 1, 6, 2, 102, 1.0, "S2", WalkRouteID).
+			AddRow(3, 1, 6, 3, 103, 6.0, "S3", "R2").
+			AddRow(4, 1, 6, 4, 104, 7.0, "S4", WalkRouteID).
+			AddRow(5, 1, 6, 5, 105, 12.0, "S5", "R3").
+			AddRow(6, 1, 6, 6, -1, 13.0, "S6", ""),
+	)
+
+	// maxTransfers=2 should allow this route (2 bus transfers, despite 5 legs)
+	results, err := idx.FindTransferRoutes([]string{"S1"}, []string{"S6"}, 2, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result (walking legs should not count as transfers), got %d", len(results))
+	}
+
+	r := results[0]
+	if len(r.Legs) != 5 {
+		t.Fatalf("expected 5 legs (bus+walk+bus+walk+bus), got %d", len(r.Legs))
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %s", err)
+	}
+}
+
 func TestFindTransferRoutes_WalkingTransfer(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

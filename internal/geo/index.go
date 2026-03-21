@@ -176,7 +176,7 @@ const WalkRouteID = "WALK"
 
 // DefaultWalkRadiusM is the maximum distance (in meters) between two stops for
 // a walking transfer edge to be created in the transit graph.
-const DefaultWalkRadiusM = 200.0
+const DefaultWalkRadiusM = 300.0
 
 // WalkEdgeCost is the cost assigned to walking transfer edges. It is higher
 // than the default route edge cost (1.0) to discourage unnecessary walking.
@@ -347,7 +347,7 @@ func (idx *StopIndex) FindTransferRoutes(originStopIDs, destStopIDs []string, ma
 			continue
 		}
 
-		numTransfers := len(legs) - 1
+		numTransfers := countBusTransfers(legs)
 		if numTransfers > maxTransfers {
 			continue
 		}
@@ -366,6 +366,23 @@ func (idx *StopIndex) FindTransferRoutes(originStopIDs, destStopIDs []string, ma
 	}
 
 	return results, nil
+}
+
+// countBusTransfers counts the number of bus-to-bus transitions in a sequence
+// of legs, ignoring walking legs. For example, bus→walk→bus→walk→bus has 2 bus
+// transfers, not 4.
+func countBusTransfers(legs []TransferLeg) int {
+	transfers := 0
+	prevWasBus := false
+	for _, leg := range legs {
+		if !leg.IsWalking {
+			if prevWasBus {
+				transfers++
+			}
+			prevWasBus = true
+		}
+	}
+	return transfers
 }
 
 // pathStep holds one row from the pgr_dijkstra result.
