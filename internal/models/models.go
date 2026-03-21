@@ -37,6 +37,8 @@ type ETAArrival struct {
 	Route       string     `json:"route"`
 	Direction   string     `json:"direction"`
 	Destination string     `json:"destination"`
+	DestTc      string     `json:"dest_tc"`
+	DestSc      string     `json:"dest_sc"`
 	StopName    string     `json:"stop_name"`
 	StopID      string     `json:"stop_id"`
 	StopSeq     int        `json:"stop_seq"`

@@ -66,6 +66,8 @@ type kmbETA struct {
 	ServiceType   int     `json:"service_type"`
 	Seq           int     `json:"seq"`
 	DestEn        string  `json:"dest_en"`
+	DestTc        string  `json:"dest_tc"`
+	DestSc        string  `json:"dest_sc"`
 	ETA           *string `json:"eta"`
 	RmkEn         string  `json:"rmk_en"`
 	DataTimestamp string  `json:"data_timestamp"`
@@ -156,6 +158,8 @@ func (k *KMBClient) FetchETA(ctx context.Context, stopID, route string) ([]model
 			Route:       e.Route,
 			Direction:   e.Dir,
 			Destination: e.DestEn,
+			DestTc:      e.DestTc,
+			DestSc:      e.DestSc,
 			StopID:      stopID,
 			StopSeq:     e.Seq,
 			ETA:         eta,

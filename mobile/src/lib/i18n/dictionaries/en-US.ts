@@ -34,8 +34,19 @@ export default {
   },
   tabs: {
     transport: "Transport",
+    nearby: "Nearby",
     settings: "Settings",
     history: "History",
+  },
+  nearby: {
+    title: "Nearby Stops",
+    empty: "No stops found nearby",
+    locationDenied: "Enable location to see nearby stops",
+    locationSettings: "Open Settings",
+    loading: "Finding nearby stops...",
+    routeTo: "To {0}",
+    noArrivals: "No arrivals",
+    noStops: "No stops found",
   },
   history: {
     title: "Chat History",

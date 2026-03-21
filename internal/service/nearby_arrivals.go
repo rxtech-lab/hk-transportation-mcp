@@ -41,6 +41,9 @@ type NearbyArrivalsResult struct {
 type NearbyStopArrivals struct {
 	StopID   string             `json:"stop_id"`
 	StopName string             `json:"stop_name"`
+	NameEn   string             `json:"name_en"`
+	NameTc   string             `json:"name_tc"`
+	NameSc   string             `json:"name_sc"`
 	Lat      float64            `json:"lat"`
 	Lon      float64            `json:"lon"`
 	Arrivals []models.ETAArrival `json:"arrivals"`
@@ -103,6 +106,9 @@ func (s *NearbyArrivalsService) Execute(ctx context.Context, lat, lon, radiusM f
 			results = append(results, NearbyStopArrivals{
 				StopID:   stop.StopID,
 				StopName: stop.NameEn,
+				NameEn:   stop.NameEn,
+				NameTc:   stop.NameTc,
+				NameSc:   stop.NameSc,
 				Lat:      stop.Lat,
 				Lon:      stop.Lon,
 				Arrivals: arrivals,
@@ -157,7 +163,7 @@ func (s *NearbyArrivalsService) ExecuteByStopID(ctx context.Context, stopID stri
 
 	routeIDs := s.index.RoutesForStop(stop.StopID)
 	if len(routeIDs) == 0 {
-		return &NearbyStopArrivals{StopID: stop.StopID, StopName: stop.NameEn, Lat: stop.Lat, Lon: stop.Lon}, nil
+		return &NearbyStopArrivals{StopID: stop.StopID, StopName: stop.NameEn, NameEn: stop.NameEn, NameTc: stop.NameTc, NameSc: stop.NameSc, Lat: stop.Lat, Lon: stop.Lon}, nil
 	}
 
 	routeNames := make(map[string]struct{})
@@ -190,6 +196,9 @@ func (s *NearbyArrivalsService) ExecuteByStopID(ctx context.Context, stopID stri
 	return &NearbyStopArrivals{
 		StopID:   stop.StopID,
 		StopName: stop.NameEn,
+		NameEn:   stop.NameEn,
+		NameTc:   stop.NameTc,
+		NameSc:   stop.NameSc,
 		Lat:      stop.Lat,
 		Lon:      stop.Lon,
 		Arrivals: arrivals,

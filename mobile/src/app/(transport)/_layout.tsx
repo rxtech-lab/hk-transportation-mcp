@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Stack } from "expo-router";
 import { useI18n } from "@/lib/i18n/i18n-provider";
 import { useTheme } from "@/hooks/use-theme";
+import { ChatStreamProvider } from "@/contexts/ChatStreamContext";
 import { MapDataContext, ArrivalsSheetContext, ToolCallSheetContext, type MapScreenData, type ArrivalsSheetData, type ToolCallSheetData } from "./_ctx";
 
 export default function TransportLayout() {
@@ -20,6 +21,7 @@ export default function TransportLayout() {
   const toolCallCtx = useMemo(() => ({ toolCallData, setToolCallData }), [toolCallData]);
 
   return (
+    <ChatStreamProvider>
     <MapDataContext value={mapCtx}>
       <ArrivalsSheetContext value={arrivalsCtx}>
         <ToolCallSheetContext value={toolCallCtx}>
@@ -76,5 +78,6 @@ export default function TransportLayout() {
         </ToolCallSheetContext>
       </ArrivalsSheetContext>
     </MapDataContext>
+    </ChatStreamProvider>
   );
 }

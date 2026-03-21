@@ -18,7 +18,8 @@ type stopRequest struct {
 }
 
 type arrivalsRequest struct {
-	Stops []stopRequest `json:"stops"`
+	Stops        []stopRequest `json:"stops"`
+	NearbyRadius float64       `json:"nearbyRadius,omitempty"` // optional: search radius in metres (max 1000)
 }
 
 type etaResponse struct {
@@ -29,12 +30,17 @@ type etaResponse struct {
 type arrivalResponse struct {
 	Route       string        `json:"route"`
 	Destination string        `json:"destination"`
+	DestTc      string        `json:"dest_tc"`
+	DestSc      string        `json:"dest_sc"`
 	Etas        []etaResponse `json:"etas"`
 }
 
 type stopResponse struct {
 	ID       string            `json:"id"`
 	Name     string            `json:"name"`
+	NameEn   string            `json:"name_en"`
+	NameTc   string            `json:"name_tc"`
+	NameSc   string            `json:"name_sc"`
 	Lat      float64           `json:"lat"`
 	Lng      float64           `json:"lng"`
 	Arrivals []arrivalResponse `json:"arrivals"`
@@ -88,6 +94,12 @@ func ArrivalsHandler(nearbyService *service.NearbyArrivalsService) http.HandlerF
 		now := time.Now()
 		respStops := make([]stopResponse, 0)
 
+		// Determine search radius
+		radius := 50.0
+		if req.NearbyRadius > 0 {
+			radius = math.Min(req.NearbyRadius, 1000)
+		}
+
 		for _, s := range req.Stops {
 			hasCoords := s.Lat != 0 || s.Lng != 0
 			hasID := s.ID != nil && *s.ID != ""
@@ -96,7 +108,7 @@ func ArrivalsHandler(nearbyService *service.NearbyArrivalsService) http.HandlerF
 				continue
 			}
 
-			var matched *service.NearbyStopArrivals
+			var matchedStops []service.NearbyStopArrivals
 
 			if hasID && !hasCoords {
 				// Fetch by stop ID directly
@@ -104,10 +116,10 @@ func ArrivalsHandler(nearbyService *service.NearbyArrivalsService) http.HandlerF
 				if err != nil || stopArrivals == nil {
 					continue
 				}
-				matched = stopArrivals
+				matchedStops = append(matchedStops, *stopArrivals)
 			} else {
 				// Fetch by lat/lng
-				result, err := nearbyService.Execute(r.Context(), s.Lat, s.Lng, 50)
+				result, err := nearbyService.Execute(r.Context(), s.Lat, s.Lng, radius)
 				if err != nil {
 					log.Printf("[/api/arrivals] Execute error: %v", err)
 					continue
@@ -119,16 +131,22 @@ func ArrivalsHandler(nearbyService *service.NearbyArrivalsService) http.HandlerF
 				if len(result.Stops) == 0 {
 					continue
 				}
-				if hasID {
+
+				if req.NearbyRadius > 0 {
+					// Nearby mode: return all stops within radius
+					matchedStops = result.Stops
+				} else if hasID {
 					for i := range result.Stops {
 						if result.Stops[i].StopID == *s.ID {
-							matched = &result.Stops[i]
+							matchedStops = append(matchedStops, result.Stops[i])
 							break
 						}
 					}
-				}
-				if matched == nil {
-					matched = &result.Stops[0]
+					if len(matchedStops) == 0 {
+						matchedStops = append(matchedStops, result.Stops[0])
+					}
+				} else {
+					matchedStops = append(matchedStops, result.Stops[0])
 				}
 			}
 
@@ -141,53 +159,60 @@ func ArrivalsHandler(nearbyService *service.NearbyArrivalsService) http.HandlerF
 				}
 			}
 
-			// Group arrivals by route
-			routeMap := make(map[string]*arrivalResponse)
-			var routeOrder []string
-			for _, a := range matched.Arrivals {
-				if routeFilter != nil {
-					if _, ok := routeFilter[a.Route]; !ok {
-						continue
+			for _, matched := range matchedStops {
+				// Group arrivals by route
+				routeMap := make(map[string]*arrivalResponse)
+				var routeOrder []string
+				for _, a := range matched.Arrivals {
+					if routeFilter != nil {
+						if _, ok := routeFilter[a.Route]; !ok {
+							continue
+						}
 					}
-				}
-				existing, ok := routeMap[a.Route]
-				if !ok {
-					existing = &arrivalResponse{
-						Route:       a.Route,
-						Destination: a.Destination,
+					existing, ok := routeMap[a.Route]
+					if !ok {
+						existing = &arrivalResponse{
+							Route:       a.Route,
+							Destination: a.Destination,
+							DestTc:      a.DestTc,
+							DestSc:      a.DestSc,
+						}
+						if existing.Destination == "" {
+							existing.Destination = a.Direction
+						}
+						routeMap[a.Route] = existing
+						routeOrder = append(routeOrder, a.Route)
 					}
-					if existing.Destination == "" {
-						existing.Destination = a.Direction
+					minutes := 0
+					if a.ETA != nil {
+						minutes = int(math.Max(0, math.Round(a.ETA.Sub(now).Minutes())))
 					}
-					routeMap[a.Route] = existing
-					routeOrder = append(routeOrder, a.Route)
+					existing.Etas = append(existing.Etas, etaResponse{
+						Minutes: minutes,
+						Remarks: a.Remark,
+					})
 				}
-				minutes := 0
-				if a.ETA != nil {
-					minutes = int(math.Max(0, math.Round(a.ETA.Sub(now).Minutes())))
+
+				arrivals := make([]arrivalResponse, 0, len(routeOrder))
+				for _, route := range routeOrder {
+					resp := *routeMap[route]
+					if resp.Etas == nil {
+						resp.Etas = []etaResponse{}
+					}
+					arrivals = append(arrivals, resp)
 				}
-				existing.Etas = append(existing.Etas, etaResponse{
-					Minutes: minutes,
-					Remarks: a.Remark,
+
+				respStops = append(respStops, stopResponse{
+					ID:       matched.StopID,
+					Name:     matched.StopName,
+					NameEn:   matched.NameEn,
+					NameTc:   matched.NameTc,
+					NameSc:   matched.NameSc,
+					Lat:      matched.Lat,
+					Lng:      matched.Lon,
+					Arrivals: arrivals,
 				})
 			}
-
-			arrivals := make([]arrivalResponse, 0, len(routeOrder))
-			for _, route := range routeOrder {
-				resp := *routeMap[route]
-				if resp.Etas == nil {
-					resp.Etas = []etaResponse{}
-				}
-				arrivals = append(arrivals, resp)
-			}
-
-			respStops = append(respStops, stopResponse{
-				ID:       matched.StopID,
-				Name:     matched.StopName,
-				Lat:      matched.Lat,
-				Lng:      matched.Lon,
-				Arrivals: arrivals,
-			})
 		}
 
 		log.Printf("[/api/arrivals] returning %d stops in %s", len(respStops), time.Since(now))

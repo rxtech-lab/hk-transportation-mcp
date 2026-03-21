@@ -58,6 +58,9 @@ export function extractMapData(
               stops.push({
                 id: stop.id,
                 name: stop.name,
+                name_en: stop.name_en,
+                name_tc: stop.name_tc,
+                name_sc: stop.name_sc,
                 lat: stop.lat,
                 lng: stop.lng,
                 arrivals: fresh?.arrivals ?? stop.arrivals,

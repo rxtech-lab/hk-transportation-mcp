@@ -63,6 +63,8 @@ type citybusETA struct {
 	Dir           string  `json:"dir"`
 	Seq           int     `json:"seq"`
 	DestEn        string  `json:"dest_en"`
+	DestTc        string  `json:"dest_tc"`
+	DestSc        string  `json:"dest_sc"`
 	ETA           *string `json:"eta"`
 	RmkEn         string  `json:"rmk_en"`
 	DataTimestamp string  `json:"data_timestamp"`
@@ -166,6 +168,8 @@ func (c *CitybusClient) FetchETA(ctx context.Context, stopID, route string) ([]m
 			Route:       e.Route,
 			Direction:   e.Dir,
 			Destination: e.DestEn,
+			DestTc:      e.DestTc,
+			DestSc:      e.DestSc,
 			StopID:      stopID,
 			StopSeq:     e.Seq,
 			ETA:         eta,
