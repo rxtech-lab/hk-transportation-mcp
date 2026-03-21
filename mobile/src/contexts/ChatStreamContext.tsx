@@ -172,8 +172,16 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  // Apply pending messages after useChat settles with the new id
+  // Apply pending messages after useChat settles with the new id.
+  // Skip the initial mount — on first render, child effects (ChatScreen restore)
+  // set pendingRef before this parent effect runs, but chatHookId hasn't changed
+  // yet, so setMessages would target the wrong chat instance.
+  const mountedRef = useRef(false);
   useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
     if (!pendingRef.current) return;
     const pending = pendingRef.current;
     pendingRef.current = null;
