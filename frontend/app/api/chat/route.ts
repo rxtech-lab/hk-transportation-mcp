@@ -1,16 +1,27 @@
 import {
   streamText,
   generateText,
+  generateId,
   Output,
   convertToModelMessages,
   stepCountIs,
 } from "ai";
+import { after } from "next/server";
+import { createResumableStreamContext } from "resumable-stream";
 import { AI_MODEL } from "@/lib/config";
 import { getMCPClient, resetMCPClient } from "@/lib/mcp-client";
 import { displayArrivalsTool } from "@/lib/tools/display-arrivals";
 import { getUserLocationTool } from "@/lib/tools/get-user-location";
 import { showLiveActivityTool } from "@/lib/tools/show-live-activity";
 import { checkRateLimit } from "@/lib/ratelimit";
+import {
+  setActiveStreamId,
+  clearActiveStreamId,
+} from "@/lib/chat-store";
+
+const streamContext = createResumableStreamContext({
+  waitUntil: after,
+});
 
 async function isHongKongTransportationQuery(
   modelMessages: Awaited<ReturnType<typeof convertToModelMessages>>,
@@ -47,17 +58,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    console.log("[chat/route] request body keys:", Object.keys(body));
-    console.log(
-      "[chat/route] messages type:",
-      typeof body.messages,
-      "isArray:",
-      Array.isArray(body.messages),
-      "length:",
-      body.messages?.length,
-    );
-    console.log("[chat/route] full body:", JSON.stringify(body).slice(0, 500));
-    const { messages } = body;
+    const { messages, id: chatId, capabilities: bodyCapabilities } = body;
 
     const recentMessages = Array.isArray(messages) ? messages.slice(-20) : [];
     const modelMessages = await convertToModelMessages(recentMessages);
@@ -73,8 +74,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const capabilities = new URL(req.url).searchParams.getAll("capabilities");
-    const hasLiveActivity = capabilities.includes("liveActivity");
+    const queryCapabilities = new URL(req.url).searchParams.getAll("capabilities");
+    const allCapabilities = [
+      ...queryCapabilities,
+      ...(Array.isArray(bodyCapabilities) ? bodyCapabilities : []),
+    ];
+    const hasLiveActivity = allCapabilities.includes("liveActivity");
 
     const mcpClient = await getMCPClient();
     const tools = await mcpClient.tools();
@@ -114,7 +119,23 @@ CRITICAL: Every stop in display_arrivals MUST have an "id" field set to the stop
 After showing arrival data for a specific route, proactively ask the user if they'd like to track the bus on their Lock Screen. If the user agrees, call show_live_activity with the route details including the route number, stop name, stop ID, destination, and current ETAs.` : ""}`,
     });
 
-    return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse({
+      onFinish: chatId
+        ? () => {
+            clearActiveStreamId(chatId);
+          }
+        : undefined,
+      consumeSseStream: chatId
+        ? async ({ stream }) => {
+            const streamId = generateId();
+            await streamContext.createNewResumableStream(
+              streamId,
+              () => stream,
+            );
+            await setActiveStreamId(chatId, streamId);
+          }
+        : undefined,
+    });
   } catch (error) {
     // Reset client on connection errors so next request retries
     resetMCPClient();

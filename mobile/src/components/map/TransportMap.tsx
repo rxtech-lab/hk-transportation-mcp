@@ -9,6 +9,7 @@ import MapView, {
 import { HK_CENTER } from "@/constants/map";
 import { StopMarker } from "./StopMarker";
 import { useTheme } from "@/hooks/use-theme";
+import { useLocalizedStopName } from "@/lib/i18n/i18n-provider";
 import type { MapData, MapStop, LocationPin } from "@/lib/types";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -24,6 +25,7 @@ export const TransportMap = forwardRef<MapView, TransportMapProps>(function Tran
 ) {
   const mapRef = useRef<MapView>(null);
   const theme = useTheme();
+  const getStopName = useLocalizedStopName();
 
   useImperativeHandle(ref, () => mapRef.current!, []);
 
@@ -123,7 +125,7 @@ export const TransportMap = forwardRef<MapView, TransportMapProps>(function Tran
           <StopMarker stop={stop} />
           <Callout tooltip>
             <View style={[styles.callout, { backgroundColor: theme.cardBackground }]}>
-              <Text style={[styles.calloutTitle, { color: theme.text }]}>{stop.name}</Text>
+              <Text style={[styles.calloutTitle, { color: theme.text }]}>{getStopName(stop)}</Text>
               {stop.arrivals && stop.arrivals.length > 0 ? (
                 stop.arrivals.slice(0, 4).map((arrival, j) => (
                   <View key={j} style={styles.calloutArrival}>

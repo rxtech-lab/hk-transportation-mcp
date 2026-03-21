@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
+import { useLocalizedStopName } from "@/lib/i18n/i18n-provider";
 import type { MapStop } from "@/lib/types";
 
 function etaColor(minutes: number) {
@@ -22,6 +23,7 @@ export function StopMarker({
   onPress?: () => void;
 }) {
   const theme = useTheme();
+  const getStopName = useLocalizedStopName();
   const hasArrivals = stop.arrivals && stop.arrivals.length > 0;
   const nextEta = hasArrivals
     ? Math.min(
@@ -45,7 +47,7 @@ export function StopMarker({
       </View>
       <View style={[styles.labelBg, { backgroundColor: theme.mapLabelBg }]}>
         <Text style={[styles.label, { color: theme.mapLabelText }]} numberOfLines={1}>
-          {stop.name}
+          {getStopName(stop)}
         </Text>
       </View>
     </Pressable>

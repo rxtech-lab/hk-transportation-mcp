@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { I18nProvider, useDictionary } from "@/lib/i18n/i18n-provider";
+import { restoreTracking } from "@/lib/live-activity";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +42,10 @@ function AppTabs() {
           <NativeTabs.Trigger.Label>{dict.tabs.transport}</NativeTabs.Trigger.Label>
           <NativeTabs.Trigger.Icon sf="bus.fill" md="directions_bus" />
         </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="nearby">
+          <NativeTabs.Trigger.Label>{dict.tabs.nearby}</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon sf="location.circle.fill" md="near_me" />
+        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="history">
           <NativeTabs.Trigger.Label>{dict.tabs.history}</NativeTabs.Trigger.Label>
           <NativeTabs.Trigger.Icon sf="clock.arrow.circlepath" md="history" />
@@ -55,6 +60,10 @@ function AppTabs() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    restoreTracking();
+  }, []);
+
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (status) => {
       if (Platform.OS !== "web") {

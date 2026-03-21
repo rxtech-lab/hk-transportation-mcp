@@ -34,8 +34,19 @@ export default {
   },
   tabs: {
     transport: "交通",
+    nearby: "附近",
     settings: "设置",
     history: "历史",
+  },
+  nearby: {
+    title: "附近车站",
+    empty: "附近没有车站",
+    locationDenied: "需要开启定位服务",
+    locationSettings: "打开设置",
+    loading: "正在搜索附近车站...",
+    routeTo: "往 {0}",
+    noArrivals: "暂无班次",
+    noStops: "找不到车站",
   },
   history: {
     title: "对话记录",

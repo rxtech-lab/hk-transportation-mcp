@@ -42,8 +42,16 @@ export interface Dictionary {
   };
   tabs: {
     readonly transport: string;
+    readonly nearby: string;
     readonly settings: string;
     readonly history: string;
+  };
+  nearby: {
+    readonly title: string;
+    readonly empty: string;
+    readonly locationDenied: string;
+    readonly locationSettings: string;
+    readonly loading: string;
   };
   history: {
     readonly title: string;
@@ -127,4 +135,40 @@ export function useI18n() {
 
 export function useDictionary() {
   return useI18n().dict;
+}
+
+/**
+ * Returns a function that picks the localized stop name based on the current locale.
+ */
+export function useLocalizedStopName() {
+  const { locale } = useI18n();
+  return (stop: { name_en?: string; name_tc?: string; name_sc?: string; name?: string }) => {
+    switch (locale) {
+      case "zh-HK":
+      case "zh-TW":
+        return stop.name_tc || stop.name_en || stop.name || "";
+      case "zh-CN":
+        return stop.name_sc || stop.name_en || stop.name || "";
+      default:
+        return stop.name_en || stop.name || "";
+    }
+  };
+}
+
+/**
+ * Returns a function that picks the localized destination based on the current locale.
+ */
+export function useLocalizedDestination() {
+  const { locale } = useI18n();
+  return (arrival: { destination?: string; dest_tc?: string; dest_sc?: string }) => {
+    switch (locale) {
+      case "zh-HK":
+      case "zh-TW":
+        return arrival.dest_tc || arrival.destination || "";
+      case "zh-CN":
+        return arrival.dest_sc || arrival.destination || "";
+      default:
+        return arrival.destination || "";
+    }
+  };
 }

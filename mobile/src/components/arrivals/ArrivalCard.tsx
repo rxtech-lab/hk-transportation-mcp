@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { EtaPill } from "./EtaPill";
 import { useTheme } from "@/hooks/use-theme";
+import { useLocalizedStopName, useLocalizedDestination } from "@/lib/i18n/i18n-provider";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
 import {
   startTracking,
@@ -47,6 +48,8 @@ export function ArrivalCard({
   onHeaderPress?: () => void;
 }) {
   const theme = useTheme();
+  const getStopName = useLocalizedStopName();
+  const getDestination = useLocalizedDestination();
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const prevRefreshing = useRef(isRefreshing);
   const [trackedKey, setTrackedKey] = useState<string | null>(() => {
@@ -70,12 +73,14 @@ export function ArrivalCard({
     (stop: (typeof data.stops)[number], arrival: (typeof data.stops)[number]["arrivals"][number]) => {
       const key = `${arrival.route}:${stop.id}`;
       const isCurrentlyTracked = trackedKey === key;
+      const localizedName = getStopName(stop);
+      const localizedDest = getDestination(arrival);
 
       if (Platform.OS === "ios") {
         ActionSheetIOS.showActionSheetWithOptions(
           {
-            title: `${arrival.route} → ${arrival.destination}`,
-            message: `at ${stop.name}`,
+            title: `${arrival.route} → ${localizedDest}`,
+            message: `at ${localizedName}`,
             options: isCurrentlyTracked
               ? ["Stop Tracking", "Cancel"]
               : ["Track in Live Activity", "Cancel"],
@@ -90,9 +95,9 @@ export function ArrivalCard({
               } else {
                 const ok = await startTracking({
                   route: arrival.route,
-                  stopName: stop.name,
+                  stopName: localizedName,
                   stopId: stop.id,
-                  destination: arrival.destination,
+                  destination: localizedDest,
                   etas: arrival.etas,
                 });
                 if (ok) setTrackedKey(key);
@@ -102,8 +107,8 @@ export function ArrivalCard({
         );
       } else {
         Alert.alert(
-          `${arrival.route} → ${arrival.destination}`,
-          `at ${stop.name}`,
+          `${arrival.route} → ${localizedDest}`,
+          `at ${localizedName}`,
           [
             { text: "Cancel", style: "cancel" },
             {
@@ -116,9 +121,9 @@ export function ArrivalCard({
                 } else {
                   const ok = await startTracking({
                     route: arrival.route,
-                    stopName: stop.name,
+                    stopName: localizedName,
                     stopId: stop.id,
-                    destination: arrival.destination,
+                    destination: localizedDest,
                     etas: arrival.etas,
                   });
                   if (ok) setTrackedKey(key);
@@ -129,7 +134,7 @@ export function ArrivalCard({
         );
       }
     },
-    [trackedKey, data],
+    [trackedKey, data, getStopName, getDestination],
   );
 
   return (
@@ -184,7 +189,9 @@ export function ArrivalCard({
       )}
 
       {/* Stop sections */}
-      {data.stops.map((stop, i) => (
+      {data.stops.map((stop, i) => {
+        const localizedName = getStopName(stop);
+        return (
         <View
           key={i}
           style={[styles.stopSection, i > 0 && [styles.stopSeparator, { borderTopColor: theme.separator }]]}
@@ -193,7 +200,7 @@ export function ArrivalCard({
           <Pressable
             onPress={() =>
               onLocationClick?.({
-                name: stop.name,
+                name: localizedName,
                 lat: stop.lat,
                 lng: stop.lng,
               })
@@ -207,7 +214,7 @@ export function ArrivalCard({
               <Ionicons name="location" size={12} color="#007AFF" />
             </View>
             <Text style={styles.stopName} numberOfLines={1}>
-              {stop.name}
+              {localizedName}
             </Text>
             <Ionicons
               name="chevron-forward"
@@ -218,10 +225,11 @@ export function ArrivalCard({
 
           {/* Arrivals for this stop */}
           {stop.arrivals.map((arrival, j) => {
+            const dest = getDestination(arrival);
             const showDest =
-              arrival.destination &&
+              dest &&
               !["N/A", "Inbound", "Outbound", "-"].includes(
-                arrival.destination.trim(),
+                dest.trim(),
               );
 
             return (
@@ -248,7 +256,7 @@ export function ArrivalCard({
                   </Pressable>
                   {showDest && (
                     <Text style={[styles.destination, { color: theme.textSecondary }]} numberOfLines={1}>
-                      {arrival.destination}
+                      {dest}
                     </Text>
                   )}
                 </View>
@@ -271,7 +279,8 @@ export function ArrivalCard({
             );
           })}
         </View>
-      ))}
+        );
+      })}
     </View>
   );
 }

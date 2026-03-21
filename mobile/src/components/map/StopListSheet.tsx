@@ -4,6 +4,7 @@ import BottomSheet, { BottomSheetFlatList } from "@gorhom/bottom-sheet";
 import { Ionicons } from "@expo/vector-icons";
 import { EtaPill } from "@/components/arrivals/EtaPill";
 import { useTheme } from "@/hooks/use-theme";
+import { useLocalizedStopName } from "@/lib/i18n/i18n-provider";
 import type { MapStop } from "@/lib/types";
 
 interface StopListSheetProps {
@@ -20,13 +21,14 @@ function StopRow({
 }) {
   const hasArrivals = stop.arrivals && stop.arrivals.length > 0;
   const theme = useTheme();
+  const getStopName = useLocalizedStopName();
 
   return (
     <Pressable onPress={onPress} style={styles.stopRow}>
       <View style={styles.stopHeader}>
         <Ionicons name="location" size={16} color="#60a5fa" />
         <Text style={[styles.stopName, { color: theme.text }]} numberOfLines={1}>
-          {stop.name}
+          {getStopName(stop)}
         </Text>
       </View>
 

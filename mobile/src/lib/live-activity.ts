@@ -1,5 +1,8 @@
 import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BACKEND_URL } from "@/lib/config";
+
+const STORAGE_KEY = "live-activity-tracking";
 
 let running = false;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -9,6 +12,23 @@ let trackedParams: {
   stopId: string;
   destination: string;
 } | null = null;
+
+/**
+ * Restore tracking info from storage so the UI shows the correct state.
+ * Call this once at app startup.
+ */
+export async function restoreTracking(): Promise<void> {
+  try {
+    const stored = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!stored) return;
+    const params = JSON.parse(stored) as typeof trackedParams;
+    if (!params) return;
+    running = true;
+    trackedParams = params;
+  } catch (e) {
+    console.warn("[LiveActivity] restoreTracking error:", e);
+  }
+}
 
 export async function startTracking(params: {
   route: string;
@@ -38,6 +58,11 @@ export async function startTracking(params: {
       stopId: params.stopId,
       destination: params.destination,
     };
+
+    // Persist to storage
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(trackedParams)).catch(
+      () => {},
+    );
 
     // Start periodic refresh every 30 seconds
     refreshTimer = setInterval(refreshActivity, 30_000);
@@ -101,6 +126,7 @@ export async function stopTracking(): Promise<void> {
   }
   running = false;
   trackedParams = null;
+  AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
 }
 
 export function isTracking(): boolean {

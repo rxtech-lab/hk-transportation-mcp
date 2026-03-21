@@ -39,11 +39,11 @@ private func toWidgetData(title: String, apiStops: [ArrivalsResponse.APIStop]) -
     title: title,
     stops: apiStops.prefix(4).map { stop in
       WidgetStop(
-        name: stop.name,
+        name: stop.localizedName,
         arrivals: (stop.arrivals ?? []).prefix(4).map { arrival in
           WidgetArrival(
             route: arrival.route,
-            destination: arrival.destination,
+            destination: arrival.localizedDestination,
             etas: (arrival.etas ?? []).prefix(3).map { eta in
               WidgetEta(minutes: eta.minutes, remarks: eta.remarks ?? "")
             }

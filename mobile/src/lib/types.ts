@@ -6,6 +6,9 @@ export interface DisplayArrivalsInput {
 export interface StopData {
   id: string;
   name: string;
+  name_en: string;
+  name_tc: string;
+  name_sc: string;
   lat: number;
   lng: number;
   arrivals: ArrivalData[];
@@ -14,6 +17,8 @@ export interface StopData {
 export interface ArrivalData {
   route: string;
   destination: string;
+  dest_tc: string;
+  dest_sc: string;
   etas: EtaData[];
 }
 
@@ -31,6 +36,9 @@ export interface LocationPin {
 export interface MapStop {
   id?: string;
   name: string;
+  name_en?: string;
+  name_tc?: string;
+  name_sc?: string;
   lat: number;
   lng: number;
   arrivals?: StopArrival[];

@@ -9,19 +9,15 @@ import {
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useChat } from "@ai-sdk/react";
-import {
-  DefaultChatTransport,
-  lastAssistantMessageIsCompleteWithToolCalls,
-  isToolUIPart,
-} from "ai";
+import { isToolUIPart } from "ai";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter, useLocalSearchParams, useSegments } from "expo-router";
+
+import * as Haptics from "expo-haptics";
 
 import { ChatMessagesList } from "@/components/chat/ChatMessages";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { useTheme } from "@/hooks/use-theme";
-import { useGeolocation } from "@/hooks/useGeolocation";
 import { useArrivalsRefresh } from "@/hooks/useArrivalsRefresh";
 import { useChatSessionStorage } from "@/hooks/useChatSessions";
 import {
@@ -32,12 +28,9 @@ import {
 } from "@/lib/db";
 import { useMapData } from "@/hooks/useMapData";
 import { useI18n } from "@/lib/i18n/i18n-provider";
-import { fetch as expoFetch } from "expo/fetch";
 import { FRONTEND_URL } from "@/lib/config";
-import { updateWidget } from "@/lib/widget";
-import { startTracking } from "@/lib/live-activity";
-import * as Haptics from "expo-haptics";
 import { TabBarContext } from "@/app/_layout";
+import { ChatStreamContext } from "@/contexts/ChatStreamContext";
 import { MapDataContext, ArrivalsSheetContext } from "./_ctx";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
 
@@ -56,16 +49,26 @@ export default function ChatScreen() {
     useState<DisplayArrivalsInput | null>(null);
   const [selectedPin, setSelectedPin] = useState<LocationPin | null>(null);
   const { setSheetData } = use(ArrivalsSheetContext);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(
-    paramSessionId ?? null,
-  );
   const [sessionTitle, setSessionTitle] = useState<string | null>(
     paramSessionId ? getSessionTitle(paramSessionId) : null,
   );
-  const geo = useGeolocation();
   const { dict } = useI18n();
   const theme = useTheme();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  // Consume chat stream from context
+  const {
+    currentChatId,
+    setChatId,
+    messages,
+    sendMessage,
+    regenerate,
+    status,
+    error,
+    setMessages,
+    addToolOutput,
+    geo,
+  } = use(ChatStreamContext);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardWillShow", () =>
@@ -80,8 +83,6 @@ export default function ChatScreen() {
     };
   }, []);
   const geoRequestedRef = useRef(false);
-  const geoRef = useRef(geo);
-  geoRef.current = geo;
   const initialMessageSentRef = useRef(false);
   const titleGeneratedRef = useRef(false);
   const prevStatusRef = useRef<string>("");
@@ -99,97 +100,11 @@ export default function ChatScreen() {
     }
   }, [status]);
 
-  const {
-    messages,
-    sendMessage,
-    regenerate,
-    status,
-    setMessages,
-    error,
-    addToolOutput,
-  } = useChat({
-    id: currentSessionId ? `session-${currentSessionId}` : "hk-transport-new",
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-    transport: new DefaultChatTransport({
-      api: `${FRONTEND_URL}/api/chat?capabilities=liveActivity`,
-      fetch: expoFetch as unknown as typeof globalThis.fetch,
-    }),
-    onToolCall({ toolCall }) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      if (toolCall.toolName === "display_arrivals") {
-        updateWidget(toolCall.input as DisplayArrivalsInput);
-        addToolOutput({
-          tool: "display_arrivals" as never,
-          toolCallId: toolCall.toolCallId,
-          output: "Arrival card displayed to user.",
-        });
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      if (toolCall.toolName === "show_live_activity") {
-        const input = toolCall.input as {
-          route: string;
-          stopName: string;
-          stopId: string;
-          destination: string;
-          etas: { minutes: number; remarks?: string }[];
-        };
-        startTracking(input).then((ok) => {
-          addToolOutput({
-            tool: "show_live_activity" as never,
-            toolCallId: toolCall.toolCallId,
-            output: ok
-              ? "Live Activity started. The user can now see real-time bus tracking on their Lock Screen and Dynamic Island."
-              : "Failed to start Live Activity. The device may not support Live Activities or the user has disabled them.",
-          });
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        });
-      }
-      if (toolCall.toolName === "get_user_location") {
-        const g = geoRef.current;
-        if (g.latitude && g.longitude) {
-          addToolOutput({
-            tool: "get_user_location" as never,
-            toolCallId: toolCall.toolCallId,
-            output: JSON.stringify({
-              latitude: g.latitude,
-              longitude: g.longitude,
-            }),
-          });
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } else {
-          geo.request().then((coords) => {
-            if (coords) {
-              addToolOutput({
-                tool: "get_user_location" as never,
-                toolCallId: toolCall.toolCallId,
-                output: JSON.stringify({
-                  latitude: coords.latitude,
-                  longitude: coords.longitude,
-                }),
-              });
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } else {
-              addToolOutput({
-                tool: "get_user_location" as never,
-                toolCallId: toolCall.toolCallId,
-                output: JSON.stringify({
-                  error:
-                    "Location unavailable. The user may have denied location permission.",
-                }),
-              });
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            }
-          });
-        }
-      }
-    },
-  });
-
-  useChatSessionStorage(currentSessionId, messages);
+  useChatSessionStorage(currentChatId, messages);
 
   // Auto-generate title after first assistant response
   useEffect(() => {
-    if (titleGeneratedRef.current || !currentSessionId || messages.length < 2) {
+    if (titleGeneratedRef.current || !currentChatId || messages.length < 2) {
       return;
     }
     const wasStreaming = prevStatusRef.current === "streaming";
@@ -197,11 +112,11 @@ export default function ChatScreen() {
 
     if (wasStreaming && status === "ready") {
       titleGeneratedRef.current = true;
-      const titleMessages = messages.slice(0, 4).map((m) => ({
+      const titleMessages = messages.slice(0, 4).map((m: { role: string; parts: Array<{ type: string; text?: string }> }) => ({
         role: m.role,
         content: m.parts
-          .filter((p): p is { type: "text"; text: string } => p.type === "text")
-          .map((p) => p.text)
+          .filter((p: { type: string; text?: string }): p is { type: "text"; text: string } => p.type === "text")
+          .map((p: { type: string; text: string }) => p.text)
           .join(""),
       }));
 
@@ -213,13 +128,39 @@ export default function ChatScreen() {
         .then((r) => r.json())
         .then((data) => {
           if (data.title) {
-            updateSessionTitle(currentSessionId, data.title);
+            updateSessionTitle(currentChatId, data.title);
             setSessionTitle(data.title);
           }
         })
         .catch(() => {});
     }
-  }, [status, messages, currentSessionId]);
+  }, [status, messages, currentChatId]);
+
+  // Fix incomplete tool calls from restored sessions
+  const toolCallFixedRef = useRef(false);
+  useEffect(() => {
+    if (toolCallFixedRef.current || messages.length === 0) return;
+
+    for (const msg of messages) {
+      if (msg.role !== "assistant") continue;
+      for (const part of msg.parts) {
+        if (
+          isToolUIPart(part) &&
+          (part.state === "input-available" || part.state === "input-streaming")
+        ) {
+          const toolName = "toolName" in part ? String(part.toolName) : part.type.replace(/^tool-/, "");
+          addToolOutput({
+            tool: toolName as never,
+            toolCallId: part.toolCallId,
+            output: JSON.stringify({
+              error: "Tool call was interrupted. Please try again.",
+            }),
+          });
+        }
+      }
+    }
+    toolCallFixedRef.current = true;
+  }, [messages, addToolOutput]);
 
   // Restore stored messages or send initial message
   const restoredRef = useRef(false);
@@ -229,33 +170,33 @@ export default function ChatScreen() {
 
     if (initialMessage && paramSessionId) {
       // New session created by landing page with initial message
-      setCurrentSessionId(paramSessionId);
       initialMessageSentRef.current = true;
       if (!geoRequestedRef.current) {
         geoRequestedRef.current = true;
         geo.request();
       }
-      setMessages([
-        {
-          id: `user-${Date.now()}`,
-          role: "user",
-          parts: [{ type: "text", text: initialMessage }],
-        },
-      ]);
-      setTimeout(() => regenerate(), 0);
+      setChatId(paramSessionId, {
+        messages: [
+          {
+            id: `user-${Date.now()}`,
+            role: "user",
+            parts: [{ type: "text", text: initialMessage }],
+          },
+        ],
+        regenerate: true,
+      });
     } else if (paramSessionId) {
       // Loading existing session from history
-      setCurrentSessionId(paramSessionId);
       const stored = loadSessionMessages(paramSessionId);
-      if (stored.length > 0) {
-        setMessages(stored);
-      }
+      setChatId(paramSessionId, {
+        messages: stored.length > 0 ? stored : undefined,
+      });
     } else {
       // New blank session
       const session = createSession();
-      setCurrentSessionId(session.id);
+      setChatId(session.id);
     }
-  }, [setMessages, initialMessage, paramSessionId, regenerate, geo]);
+  }, [initialMessage, paramSessionId, geo, setChatId]);
 
   const arrivalsFromMessages = useMemo(() => {
     let last: DisplayArrivalsInput | null = null;
@@ -348,14 +289,14 @@ export default function ChatScreen() {
   const handleClear = useCallback(() => {
     // Create a new session and reset state
     const session = createSession();
-    setCurrentSessionId(session.id);
-    setMessages([]);
+    setChatId(session.id, { messages: [] });
     setArrivalsOverride(null);
     setSessionTitle(null);
     geoRequestedRef.current = false;
     titleGeneratedRef.current = false;
     prevStatusRef.current = "";
-  }, [setMessages]);
+    toolCallFixedRef.current = false;
+  }, [setChatId]);
 
   const isLoading = status === "streaming" || status === "submitted";
   const hasMapContent = mapData.stops.length > 0 || mapData.routes.length > 0;

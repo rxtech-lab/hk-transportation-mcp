@@ -34,8 +34,19 @@ export default {
   },
   tabs: {
     transport: "交通",
+    nearby: "附近",
     settings: "設定",
     history: "歷史",
+  },
+  nearby: {
+    title: "附近車站",
+    empty: "附近沒有車站",
+    locationDenied: "需要開啟定位服務",
+    locationSettings: "開啟設定",
+    loading: "正在搜尋附近車站...",
+    routeTo: "往 {0}",
+    noArrivals: "暫無班次",
+    noStops: "找不到車站",
   },
   history: {
     title: "對話紀錄",
