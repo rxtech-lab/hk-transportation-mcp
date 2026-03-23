@@ -21,6 +21,13 @@ const (
 // GMB regions
 var gmbRegions = []string{"HKI", "KLN", "NT"}
 
+// gmbDestInfo stores destination info for a GMB route direction.
+type gmbDestInfo struct {
+	DestEn string
+	DestTc string
+	DestSc string
+}
+
 // GMBClient implements BusAPIClient for Hong Kong Green Minibuses (GMB).
 type GMBClient struct {
 	http *http.Client
@@ -31,6 +38,9 @@ type GMBClient struct {
 	// routeCodeToIDs maps route code → slice of GMB numeric route_ids.
 	// Used by FetchETA to look up the route_id from a route code.
 	routeCodeToIDs map[string][]int64
+	// routeDestMap maps "gmbRouteID:routeSeq" → destination info.
+	// Populated during FetchAllRoutes and used by FetchETA.
+	routeDestMap map[string]gmbDestInfo
 }
 
 // NewGMBClient creates a new GMB API client.
@@ -39,6 +49,7 @@ func NewGMBClient(c *http.Client) *GMBClient {
 		http:           c,
 		routeIDMap:     make(map[string]int64),
 		routeCodeToIDs: make(map[string][]int64),
+		routeDestMap:   make(map[string]gmbDestInfo),
 	}
 }
 
@@ -127,6 +138,7 @@ func (g *GMBClient) FetchAllRoutes(ctx context.Context) ([]models.Route, error) 
 	g.mu.Lock()
 	g.routeIDMap = make(map[string]int64)
 	g.routeCodeToIDs = make(map[string][]int64)
+	g.routeDestMap = make(map[string]gmbDestInfo)
 	g.mu.Unlock()
 
 	var allRoutes []models.Route
@@ -175,9 +187,15 @@ func (g *GMBClient) FetchAllRoutes(ctx context.Context) ([]models.Route, error) 
 
 					// Store mapping for later use by FetchRouteStops and FetchETA
 					key := routeCode + ":" + bound + ":" + svcType
+					destKey := fmt.Sprintf("%d:%d", routeInfo.RouteID, dir.RouteSeq)
 					g.mu.Lock()
 					g.routeIDMap[key] = routeInfo.RouteID
 					g.routeCodeToIDs[routeCode] = appendUnique(g.routeCodeToIDs[routeCode], routeInfo.RouteID)
+					g.routeDestMap[destKey] = gmbDestInfo{
+						DestEn: dir.DestEn,
+						DestTc: dir.DestTc,
+						DestSc: dir.DestSc,
+					}
 					g.mu.Unlock()
 				}
 			}
@@ -296,6 +314,20 @@ func (g *GMBClient) FetchETA(ctx context.Context, stopID, route string) ([]model
 	gmbRouteIDs := g.routeCodeToIDs[route]
 	g.mu.RUnlock()
 
+	// Lazily populate route mappings if not yet loaded (e.g. fresh server start).
+	if len(gmbRouteIDs) == 0 {
+		if _, err := g.FetchAllRoutes(ctx); err != nil {
+			return nil, fmt.Errorf("gmb: failed to populate routes for ETA: %w", err)
+		}
+		g.mu.RLock()
+		gmbRouteIDs = g.routeCodeToIDs[route]
+		g.mu.RUnlock()
+	}
+
+	if len(gmbRouteIDs) == 0 {
+		return []models.ETAArrival{}, nil
+	}
+
 	var allArrivals []models.ETAArrival
 
 	for _, gmbRouteID := range gmbRouteIDs {
@@ -308,6 +340,13 @@ func (g *GMBClient) FetchETA(ctx context.Context, stopID, route string) ([]model
 
 		for _, etaRS := range resp.Data {
 			dir := gmbBound(etaRS.RouteSeq)
+
+			// Look up destination info from stored route directions
+			destKey := fmt.Sprintf("%d:%d", gmbRouteID, etaRS.RouteSeq)
+			g.mu.RLock()
+			dest := g.routeDestMap[destKey]
+			g.mu.RUnlock()
+
 			for _, eta := range etaRS.ETAs {
 				var etaTime *time.Time
 				if eta.Timestamp != "" {
@@ -319,9 +358,9 @@ func (g *GMBClient) FetchETA(ctx context.Context, stopID, route string) ([]model
 				allArrivals = append(allArrivals, models.ETAArrival{
 					Route:       route,
 					Direction:   dir,
-					Destination: "",
-					DestTc:      "",
-					DestSc:      "",
+					Destination: dest.DestEn,
+					DestTc:      dest.DestTc,
+					DestSc:      dest.DestSc,
 					StopID:      stopID,
 					StopSeq:     etaRS.StopSeq,
 					ETA:         etaTime,
