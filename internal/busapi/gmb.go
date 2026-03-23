@@ -149,15 +149,18 @@ func (g *GMBClient) FetchAllRoutes(ctx context.Context) ([]models.Route, error) 
 				continue
 			}
 
+			// Service type 1 is reserved for normal service ("正常班次").
+			// Non-normal variants are numbered starting at 2.
+			nextNonNormalSvcType := 2
 			for _, routeInfo := range routeResp.Data {
-				serviceType := 1
+				svcType := "1"
 				if routeInfo.DescriptionTc != "" && routeInfo.DescriptionTc != "正常班次" {
-					serviceType = 2
+					svcType = strconv.Itoa(nextNonNormalSvcType)
+					nextNonNormalSvcType++
 				}
 
 				for _, dir := range routeInfo.Directions {
 					bound := gmbBound(dir.RouteSeq)
-					svcType := strconv.Itoa(serviceType)
 
 					route := models.Route{
 						RouteID:     fmt.Sprintf("GMB-%s-%s-%s", routeCode, bound, svcType),
@@ -176,11 +179,6 @@ func (g *GMBClient) FetchAllRoutes(ctx context.Context) ([]models.Route, error) 
 					g.routeIDMap[key] = routeInfo.RouteID
 					g.routeCodeToIDs[routeCode] = appendUnique(g.routeCodeToIDs[routeCode], routeInfo.RouteID)
 					g.mu.Unlock()
-				}
-
-				// Increment service type for non-normal variants
-				if routeInfo.DescriptionTc != "" && routeInfo.DescriptionTc != "正常班次" {
-					serviceType++
 				}
 			}
 		}

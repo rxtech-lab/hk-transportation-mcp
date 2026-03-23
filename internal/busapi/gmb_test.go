@@ -135,6 +135,67 @@ func TestGMBClientFetchAllRoutes(t *testing.T) {
 	client.mu.RUnlock()
 }
 
+func TestGMBClientFetchAllRoutesMultiVariant(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/route/HKI", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(gmbResponse[gmbRegionRoutes]{
+			Data: gmbRegionRoutes{Routes: []string{"5"}},
+		})
+	})
+	mux.HandleFunc("/route/KLN", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(gmbResponse[gmbRegionRoutes]{Data: gmbRegionRoutes{Routes: []string{}}})
+	})
+	mux.HandleFunc("/route/NT", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(gmbResponse[gmbRegionRoutes]{Data: gmbRegionRoutes{Routes: []string{}}})
+	})
+	// Route 5 has normal service + a special variant
+	mux.HandleFunc("/route/HKI/5", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(gmbResponse[[]gmbRouteInfo]{
+			Data: []gmbRouteInfo{
+				{
+					RouteID:       100001,
+					DescriptionTc: "正常班次",
+					Directions: []gmbRouteDirection{
+						{RouteSeq: 1, OrigEn: "A", DestEn: "B"},
+					},
+				},
+				{
+					RouteID:       100002,
+					DescriptionTc: "特別班次",
+					Directions: []gmbRouteDirection{
+						{RouteSeq: 1, OrigEn: "A", DestEn: "C"},
+					},
+				},
+				{
+					RouteID:       100003,
+					DescriptionTc: "假日班次",
+					Directions: []gmbRouteDirection{
+						{RouteSeq: 1, OrigEn: "A", DestEn: "D"},
+					},
+				},
+			},
+		})
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	client := newTestGMBClient(srv)
+
+	routes, err := client.FetchAllRoutes(context.Background())
+	if err != nil {
+		t.Fatalf("FetchAllRoutes: %v", err)
+	}
+
+	// Normal=svc1, first special=svc2, second special=svc3
+	svcTypes := make(map[string]bool)
+	for _, r := range routes {
+		svcTypes[r.ServiceType] = true
+	}
+	if !svcTypes["1"] || !svcTypes["2"] || !svcTypes["3"] {
+		t.Errorf("expected service types 1,2,3; got routes: %v", routes)
+	}
+}
+
 func TestGMBClientFetchAllStops(t *testing.T) {
 	mux := setupTestMux()
 
