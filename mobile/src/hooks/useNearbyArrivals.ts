@@ -18,7 +18,7 @@ async function fetchNearbyArrivals(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       stops: [{ lat, lng }],
-      nearbyRadius: 20,
+      nearbyRadius: 50,
     }),
   });
   if (!res.ok) throw new Error("Failed to fetch nearby arrivals");
@@ -26,10 +26,7 @@ async function fetchNearbyArrivals(
   return data.stops ?? [];
 }
 
-export function useNearbyArrivals(
-  lat: number | null,
-  lng: number | null,
-) {
+export function useNearbyArrivals(lat: number | null, lng: number | null) {
   const enabled = lat != null && lng != null;
 
   const roundedLat = useMemo(

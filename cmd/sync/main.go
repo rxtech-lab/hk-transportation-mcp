@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/joho/godotenv"
@@ -17,6 +19,9 @@ import (
 )
 
 func main() {
+	operators := flag.String("operators", "", "comma-separated list of operators to sync (kmb,citybus,gmb). If empty, syncs all.")
+	flag.Parse()
+
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using environment variables")
 	}
@@ -36,7 +41,34 @@ func main() {
 	kmbClient := busapi.NewKMBClient(httpClient)
 	citybusClient := busapi.NewCitybusClient(httpClient)
 	gmbClient := busapi.NewGMBClient(httpClient)
-	clients := []busapi.BusAPIClient{kmbClient, citybusClient, gmbClient}
+
+	// Build operator filter set
+	selected := make(map[string]bool)
+	if *operators != "" {
+		for _, op := range strings.Split(*operators, ",") {
+			selected[strings.TrimSpace(strings.ToLower(op))] = true
+		}
+	}
+
+	var clients []busapi.BusAPIClient
+	if len(selected) == 0 {
+		clients = []busapi.BusAPIClient{kmbClient, citybusClient, gmbClient}
+	} else {
+		if selected["kmb"] {
+			clients = append(clients, kmbClient)
+		}
+		if selected["citybus"] {
+			clients = append(clients, citybusClient)
+		}
+		if selected["gmb"] {
+			clients = append(clients, gmbClient)
+		}
+		if len(clients) == 0 {
+			log.Fatalf("No valid operators specified. Use: kmb, citybus, gmb")
+		}
+	}
+
+	log.Printf("Syncing operators: %s", operatorNames(clients))
 
 	index := geo.NewStopIndex(db)
 
@@ -57,4 +89,12 @@ func main() {
 	}
 
 	log.Printf("Sync complete: %d stops loaded", index.StopCount())
+}
+
+func operatorNames(clients []busapi.BusAPIClient) string {
+	names := make([]string, len(clients))
+	for i, c := range clients {
+		names[i] = c.Operator()
+	}
+	return strings.Join(names, ", ")
 }

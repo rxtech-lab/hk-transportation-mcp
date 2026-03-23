@@ -37,10 +37,10 @@ func fetchArrivals(stops: [ArrivalsRequest.StopReq]) async -> ArrivalsResponse? 
 private func toWidgetData(title: String, apiStops: [ArrivalsResponse.APIStop]) -> WidgetArrivalsData {
   WidgetArrivalsData(
     title: title,
-    stops: apiStops.prefix(4).map { stop in
+    stops: apiStops.prefix(8).map { stop in
       WidgetStop(
         name: stop.localizedName,
-        arrivals: (stop.arrivals ?? []).prefix(4).map { arrival in
+        arrivals: (stop.arrivals ?? []).prefix(8).map { arrival in
           WidgetArrival(
             route: arrival.route,
             destination: arrival.localizedDestination,
@@ -268,6 +268,22 @@ struct SmallWidgetView: View {
   }
 }
 
+// MARK: - Row truncation helper
+
+private func truncateStops(_ stops: [WidgetStop], maxRows: Int) -> [(stop: WidgetStop, arrivalCount: Int)] {
+  var rows = 0
+  var result: [(stop: WidgetStop, arrivalCount: Int)] = []
+  for stop in stops {
+    rows += 1
+    if rows > maxRows { break }
+    let available = min(stop.arrivals.count, maxRows - rows)
+    result.append((stop: stop, arrivalCount: available))
+    rows += available
+    if rows >= maxRows { break }
+  }
+  return result
+}
+
 // MARK: - Medium Widget
 
 struct MediumWidgetView: View {
@@ -287,18 +303,19 @@ struct MediumWidgetView: View {
           Spacer()
         }
 
-        ForEach(Array(data.stops.prefix(3).enumerated()), id: \.offset) { stopIdx, stop in
+        let truncated = truncateStops(data.stops, maxRows: 4)
+        ForEach(Array(truncated.enumerated()), id: \.offset) { stopIdx, item in
           if stopIdx > 0 {
             Divider()
           }
 
-          Text(stop.name)
+          Text(item.stop.name)
             .font(.caption)
             .fontWeight(.semibold)
             .foregroundColor(.primary)
             .lineLimit(1)
 
-          ForEach(Array(stop.arrivals.prefix(3).enumerated()), id: \.offset) { _, arrival in
+          ForEach(Array(item.stop.arrivals.prefix(item.arrivalCount).enumerated()), id: \.offset) { _, arrival in
             HStack(spacing: 4) {
               Text(arrival.route)
                 .font(.caption)
@@ -322,6 +339,88 @@ struct MediumWidgetView: View {
                     .padding(.vertical, 2)
                     .background(etaColor(eta.minutes))
                     .cornerRadius(4)
+                }
+              }
+            }
+          }
+        }
+
+        Spacer(minLength: 0)
+      }
+      .padding()
+    } else {
+      HStack {
+        Spacer()
+        VStack(spacing: 8) {
+          Image(systemName: "bus.fill")
+            .font(.title2)
+            .foregroundColor(.secondary)
+          Text(emptyMessage(entry.status))
+            .font(.caption)
+            .foregroundColor(.secondary)
+        }
+        Spacer()
+      }
+      .padding()
+    }
+  }
+}
+
+// MARK: - Large Widget
+
+struct LargeWidgetView: View {
+  let entry: ArrivalsEntry
+
+  var body: some View {
+    if let data = entry.data, !data.stops.isEmpty {
+      VStack(alignment: .leading, spacing: 6) {
+        HStack {
+          if !data.title.isEmpty {
+            Text(data.title)
+              .font(.caption)
+              .fontWeight(.semibold)
+              .foregroundColor(.secondary)
+              .lineLimit(1)
+          }
+          Spacer()
+        }
+
+        let truncated = truncateStops(data.stops, maxRows: 8)
+        ForEach(Array(truncated.enumerated()), id: \.offset) { stopIdx, item in
+          if stopIdx > 0 {
+            Divider()
+          }
+
+          Text(item.stop.name)
+            .font(.subheadline)
+            .fontWeight(.semibold)
+            .foregroundColor(.primary)
+            .lineLimit(1)
+
+          ForEach(Array(item.stop.arrivals.prefix(item.arrivalCount).enumerated()), id: \.offset) { _, arrival in
+            HStack(spacing: 6) {
+              Text(arrival.route)
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .frame(minWidth: 36, alignment: .leading)
+
+              Text(arrival.destination)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+
+              Spacer()
+
+              HStack(spacing: 3) {
+                ForEach(Array(arrival.etas.prefix(3).enumerated()), id: \.offset) { _, eta in
+                  Text(etaText(eta.minutes))
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(etaColor(eta.minutes))
+                    .cornerRadius(5)
                 }
               }
             }
@@ -382,7 +481,7 @@ struct HKTransportWidget: Widget {
     }
     .configurationDisplayName("Transit Arrivals")
     .description("See real-time bus & transit ETAs at a glance.")
-    .supportedFamilies([.systemSmall, .systemMedium])
+    .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
   }
 }
 
@@ -396,6 +495,8 @@ struct WidgetFamilyView: View {
       SmallWidgetView(entry: entry)
     case .systemMedium:
       MediumWidgetView(entry: entry)
+    case .systemLarge:
+      LargeWidgetView(entry: entry)
     default:
       MediumWidgetView(entry: entry)
     }
