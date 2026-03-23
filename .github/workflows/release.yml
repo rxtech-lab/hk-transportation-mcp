@@ -44,6 +44,17 @@ jobs:
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
             type=sha,prefix=sha-
 
+      - name: Extract metadata (sync)
+        id: meta-sync
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/hk-transportation-mcp-sync
+          tags: |
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            type=sha,prefix=sha-
+
       - name: Build Docker image (test only)
         if: github.event_name != 'release'
         uses: docker/build-push-action@v6
@@ -54,6 +65,18 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=hk-transportation-mcp
           cache-to: type=gha,mode=max,scope=hk-transportation-mcp
+
+      - name: Build Docker sync image (test only)
+        if: github.event_name != 'release'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.sync
+          push: false
+          tags: ${{ steps.meta-sync.outputs.tags }}
+          labels: ${{ steps.meta-sync.outputs.labels }}
+          cache-from: type=gha,scope=hk-transportation-mcp-sync
+          cache-to: type=gha,mode=max,scope=hk-transportation-mcp-sync
 
       - name: Build and push Docker image
         if: github.event_name == 'release'
@@ -66,6 +89,19 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=hk-transportation-mcp
           cache-to: type=gha,mode=max,scope=hk-transportation-mcp
+
+      - name: Build and push Docker sync image
+        if: github.event_name == 'release'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.sync
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-sync.outputs.tags }}
+          labels: ${{ steps.meta-sync.outputs.labels }}
+          cache-from: type=gha,scope=hk-transportation-mcp-sync
+          cache-to: type=gha,mode=max,scope=hk-transportation-mcp-sync
 
   k8s-deploy:
     name: Deploy to Kubernetes
@@ -100,6 +136,9 @@ jobs:
           VERSION="${{ github.ref_name }}"
           kubectl set image deployment/hk-transportation-mcp \
             hk-transportation-mcp=ghcr.io/${{ github.repository_owner }}/hk-transportation-mcp:${VERSION} \
+            -n hk-transportation-mcp
+          kubectl set image cronjob/hk-transportation-mcp-sync \
+            sync=ghcr.io/${{ github.repository_owner }}/hk-transportation-mcp-sync:${VERSION} \
             -n hk-transportation-mcp
 
       - name: Wait for rollouts
