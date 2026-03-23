@@ -62,6 +62,15 @@ export default function TransportLayout() {
             }}
           />
           <Stack.Screen
+            name="route"
+            options={{
+              presentation: "formSheet",
+              headerShown: true,
+              headerShadowVisible: false,
+              contentStyle: { backgroundColor: theme.backgroundSecondary },
+            }}
+          />
+          <Stack.Screen
             name="tool-call"
             options={{
               presentation: "formSheet",

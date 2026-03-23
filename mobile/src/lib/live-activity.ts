@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BACKEND_URL } from "@/lib/config";
+import { incrementRouteTracking } from "@/lib/db";
 
 const STORAGE_KEY = "live-activity-tracking";
 
@@ -58,6 +59,9 @@ export async function startTracking(params: {
       stopId: params.stopId,
       destination: params.destination,
     };
+
+    // Record tracking count
+    incrementRouteTracking(params.route, params.destination);
 
     // Persist to storage
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(trackedParams)).catch(

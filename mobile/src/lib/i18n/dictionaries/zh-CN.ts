@@ -49,8 +49,12 @@ export default {
     noStops: "找不到车站",
   },
   history: {
-    title: "对话记录",
+    title: "历史",
+    chatHistory: "对话",
+    trackingHistory: "追踪",
     empty: "暂无对话记录",
+    trackingEmpty: "暂无追踪记录",
+    trackingCount: "{0} 次",
     delete: "删除",
     untitled: "未命名对话",
   },

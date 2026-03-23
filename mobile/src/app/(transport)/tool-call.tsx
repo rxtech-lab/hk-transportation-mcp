@@ -107,12 +107,15 @@ export default function ToolCallSheet() {
 
   if (!toolCallData) return null;
 
+  const isError = toolCallData.state === "output-error";
   const stateColor =
     toolCallData.state === "output-available"
       ? "#4ade80"
-      : toolCallData.state === "output-error"
+      : isError
         ? "#f87171"
         : theme.textTertiary;
+
+  const noDetails = isError && toolCallData.input == null && toolCallData.output == null;
 
   return (
     <>
@@ -140,43 +143,67 @@ export default function ToolCallSheet() {
           </Text>
         </View>
 
-        <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-          Input
-        </Text>
-        <View
-          style={[
-            styles.codeBlock,
-            {
-              backgroundColor: theme.codeBackground,
-              borderColor: theme.codeBorder,
-            },
-          ]}
-        >
-          {toolCallData.input != null ? (
-            <HighlightedJson data={toolCallData.input} />
-          ) : (
-            <Text style={[styles.codeText, { color: theme.textTertiary }]}>—</Text>
-          )}
-        </View>
+        {noDetails ? (
+          <View
+            style={[
+              styles.codeBlock,
+              {
+                backgroundColor: "rgba(239,68,68,0.06)",
+                borderColor: "rgba(239,68,68,0.2)",
+              },
+            ]}
+          >
+            <Text style={[styles.codeText, { color: "#f87171" }]}>
+              The connection was interrupted before this tool call completed.{"\n\n"}
+              This usually means the server returned an error or the network dropped.
+              Check the server logs for more details.
+            </Text>
+          </View>
+        ) : (
+          <>
+            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+              Input
+            </Text>
+            <View
+              style={[
+                styles.codeBlock,
+                {
+                  backgroundColor: theme.codeBackground,
+                  borderColor: theme.codeBorder,
+                },
+              ]}
+            >
+              {toolCallData.input != null ? (
+                <HighlightedJson data={toolCallData.input} />
+              ) : (
+                <Text style={[styles.codeText, { color: theme.textTertiary }]}>—</Text>
+              )}
+            </View>
 
-        <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-          Output
-        </Text>
-        <View
-          style={[
-            styles.codeBlock,
-            {
-              backgroundColor: theme.codeBackground,
-              borderColor: theme.codeBorder,
-            },
-          ]}
-        >
-          {toolCallData.output != null ? (
-            <HighlightedJson data={toolCallData.output} />
-          ) : (
-            <Text style={[styles.codeText, { color: theme.textTertiary }]}>—</Text>
-          )}
-        </View>
+            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+              Output
+            </Text>
+            <View
+              style={[
+                styles.codeBlock,
+                {
+                  backgroundColor: isError
+                    ? "rgba(239,68,68,0.06)"
+                    : theme.codeBackground,
+                  borderColor: isError
+                    ? "rgba(239,68,68,0.2)"
+                    : theme.codeBorder,
+                },
+              ]}
+            >
+              {toolCallData.output != null ? (
+                <HighlightedJson data={toolCallData.output} />
+              ) : (
+                <Text style={[styles.codeText, { color: theme.textTertiary }]}>—</Text>
+              )}
+            </View>
+          </>
+        )}
       </ScrollView>
     </>
   );

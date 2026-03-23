@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -13,12 +13,17 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/use-theme";
-import { useDictionary, useLocalizedStopName, useLocalizedDestination } from "@/lib/i18n/i18n-provider";
+import {
+  useDictionary,
+  useLocalizedStopName,
+  useLocalizedDestination,
+} from "@/lib/i18n/i18n-provider";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useNearbyArrivals } from "@/hooks/useNearbyArrivals";
 import { EtaPill } from "@/components/arrivals/EtaPill";
 import * as Haptics from "expo-haptics";
 import type { ArrivalData, StopData } from "@/lib/types";
+import { getRouteTrackingCounts } from "@/lib/db";
 
 interface Section {
   stopId: string;
@@ -28,16 +33,47 @@ interface Section {
   data: ArrivalData[];
 }
 
-function buildSections(stops: StopData[], getStopName: (stop: StopData) => string): Section[] {
-  return stops
+function buildSections(
+  stops: StopData[],
+  getStopName: (stop: StopData) => string,
+  trackingCounts: Map<string, number>,
+): Section[] {
+  const sections = stops
     .filter((s) => s.arrivals.length > 0)
-    .map((stop) => ({
-      stopId: stop.id,
-      stopName: getStopName(stop),
-      stopLat: stop.lat,
-      stopLng: stop.lng,
-      data: stop.arrivals,
-    }));
+    .map((stop) => {
+      // Sort arrivals: tracked routes first (by count DESC), then original order
+      const sorted = [...stop.arrivals].sort((a, b) => {
+        const countA = trackingCounts.get(`${a.route}|${a.destination}`) ?? 0;
+        const countB = trackingCounts.get(`${b.route}|${b.destination}`) ?? 0;
+        return countB - countA;
+      });
+      return {
+        stopId: stop.id,
+        stopName: getStopName(stop),
+        stopLat: stop.lat,
+        stopLng: stop.lng,
+        data: sorted,
+      };
+    });
+
+  // Sort stops: those with tracked routes first, by highest tracking count
+  sections.sort((a, b) => {
+    const maxA = Math.max(
+      0,
+      ...a.data.map(
+        (d) => trackingCounts.get(`${d.route}|${d.destination}`) ?? 0,
+      ),
+    );
+    const maxB = Math.max(
+      0,
+      ...b.data.map(
+        (d) => trackingCounts.get(`${d.route}|${d.destination}`) ?? 0,
+      ),
+    );
+    return maxB - maxA;
+  });
+
+  return sections;
 }
 
 export default function NearbyScreen() {
@@ -53,6 +89,16 @@ export default function NearbyScreen() {
   const { stops, isLoading, isRefreshing, lastRefreshedAt, refetch } =
     useNearbyArrivals(geo.latitude, geo.longitude);
 
+  const [trackingCounts, setTrackingCounts] = useState<Map<string, number>>(
+    () => new Map(),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      setTrackingCounts(getRouteTrackingCounts());
+    }, []),
+  );
+
   // Haptic feedback when nearby arrivals data refreshes
   const initialLoadRef = useRef(true);
   useEffect(() => {
@@ -64,7 +110,7 @@ export default function NearbyScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [lastRefreshedAt]);
 
-  const sections = buildSections(stops, getStopName);
+  const sections = buildSections(stops, getStopName, trackingCounts);
 
   useFocusEffect(
     useCallback(() => {
@@ -76,8 +122,9 @@ export default function NearbyScreen() {
     ({ item, section }: { item: ArrivalData; section: Section }) => {
       const dest = getDestination(item);
       const showDest =
-        dest &&
-        !["N/A", "Inbound", "Outbound", "-"].includes(dest.trim());
+        dest && !["N/A", "Inbound", "Outbound", "-"].includes(dest.trim());
+      const isTracked =
+        (trackingCounts.get(`${item.route}|${item.destination}`) ?? 0) > 0;
 
       return (
         <Pressable
@@ -98,7 +145,9 @@ export default function NearbyScreen() {
           ]}
         >
           <View style={styles.routeCol}>
-            <View style={styles.routeBadge}>
+            <View
+              style={[styles.routeBadge, isTracked && styles.routeBadgeTracked]}
+            >
               <Ionicons name="bus" size={10} color="#fff" />
               <Text style={styles.routeNumber}>{item.route}</Text>
             </View>
@@ -120,11 +169,15 @@ export default function NearbyScreen() {
               <EtaPill key={k} minutes={eta.minutes} remarks={eta.remarks} />
             ))}
           </ScrollView>
-          <Ionicons name="chevron-forward" size={14} color={theme.textSecondary} />
+          <Ionicons
+            name="chevron-forward"
+            size={14}
+            color={theme.textSecondary}
+          />
         </Pressable>
       );
     },
-    [theme, router, getDestination],
+    [theme, router, getDestination, trackingCounts],
   );
 
   const renderSectionHeader = useCallback(
@@ -148,7 +201,10 @@ export default function NearbyScreen() {
         <View style={styles.stopIcon}>
           <Ionicons name="location" size={12} color="#007AFF" />
         </View>
-        <Text style={[styles.stopName, { color: theme.text }]} numberOfLines={1}>
+        <Text
+          style={[styles.stopName, { color: theme.text }]}
+          numberOfLines={1}
+        >
           {section.stopName}
         </Text>
         <Ionicons name="map-outline" size={16} color={theme.textSecondary} />
@@ -298,6 +354,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     alignSelf: "flex-start",
+  },
+  routeBadgeTracked: {
+    backgroundColor: "#34C759",
   },
   routeNumber: {
     fontSize: 13,

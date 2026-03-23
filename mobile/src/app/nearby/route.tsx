@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -18,6 +18,12 @@ import { useLocalizedStopName } from "@/lib/i18n/i18n-provider";
 import { useRouteStops, type RouteStopInfo } from "@/hooks/useRouteStops";
 import { useStopEta } from "@/hooks/useStopEta";
 import { EtaPill } from "@/components/arrivals/EtaPill";
+import {
+  startTracking,
+  stopTracking,
+  getTrackedInfo,
+} from "@/lib/live-activity";
+import * as Haptics from "expo-haptics";
 
 if (
   Platform.OS === "android" &&
@@ -34,6 +40,7 @@ function StopRow({
   isCurrent,
   theme,
   displayName,
+  onLayoutCurrent,
 }: {
   stop: RouteStopInfo;
   route: string;
@@ -42,8 +49,9 @@ function StopRow({
   isCurrent: boolean;
   theme: ReturnType<typeof useTheme>;
   displayName: string;
+  onLayoutCurrent?: (y: number) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(isCurrent);
   const { stopData, isLoading } = useStopEta(stop.id, route, expanded);
 
   const toggle = useCallback(() => {
@@ -56,6 +64,11 @@ function StopRow({
   return (
     <Pressable
       onPress={toggle}
+      onLayout={
+        isCurrent && onLayoutCurrent
+          ? (e) => onLayoutCurrent(e.nativeEvent.layout.y)
+          : undefined
+      }
       style={({ pressed }) => [
         styles.stopRow,
         { backgroundColor: theme.cardBackground },
@@ -145,6 +158,51 @@ export default function RouteDetailScreen() {
   }>();
 
   const router = useRouter();
+  const scrollRef = useRef<ScrollView>(null);
+  const cardYRef = useRef(0);
+  const hasScrolledRef = useRef(false);
+
+  // Track/untrack state
+  const [trackedKey, setTrackedKey] = useState<string | null>(() => {
+    const info = getTrackedInfo();
+    return info ? `${info.route}:${info.stopId}` : null;
+  });
+  const currentKey = params.route && params.stopId ? `${params.route}:${params.stopId}` : null;
+  const isTracked = currentKey !== null && trackedKey === currentKey;
+
+  const handleToggleTracking = useCallback(async () => {
+    if (!params.route || !params.stopId) return;
+    if (isTracked) {
+      await stopTracking();
+      setTrackedKey(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else {
+      const ok = await startTracking({
+        route: params.route,
+        stopName: params.stopId,
+        stopId: params.stopId,
+        destination: params.destination ?? "",
+        etas: [],
+      });
+      if (ok) {
+        setTrackedKey(currentKey);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    }
+  }, [isTracked, params, currentKey]);
+
+  const handleCurrentStopLayout = useCallback((y: number) => {
+    if (hasScrolledRef.current) return;
+    hasScrolledRef.current = true;
+    // Delay slightly to ensure ScrollView is fully laid out
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: cardYRef.current + y - 100,
+        animated: true,
+      });
+    }, 300);
+  }, []);
+
   const { stops, destination, isLoading } = useRouteStops(
     params.route ?? null,
     params.stopId ?? null,
@@ -161,19 +219,19 @@ export default function RouteDetailScreen() {
       : params.route
     : "";
 
+  const headerRight = useCallback(
+    () => (
+      <Pressable onPress={() => router.back()} hitSlop={8}>
+        <Ionicons name="close" size={22} color={theme.textSecondary} />
+      </Pressable>
+    ),
+    [router, theme],
+  );
+
   if (isLoading) {
     return (
       <>
-        <Stack.Screen
-          options={{
-            title,
-            headerRight: () => (
-              <Pressable onPress={() => router.back()} hitSlop={8}>
-                <Ionicons name="close" size={22} color={theme.textSecondary} />
-              </Pressable>
-            ),
-          }}
-        />
+        <Stack.Screen options={{ title, headerRight }} />
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#007AFF" />
         </View>
@@ -183,23 +241,21 @@ export default function RouteDetailScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title,
-          headerRight: () => (
-            <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Ionicons name="close" size={22} color={theme.textSecondary} />
-            </Pressable>
-          ),
-        }}
-      />
+      <Stack.Screen options={{ title, headerRight }} />
+      <View style={{ flex: 1 }}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.list,
-          { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 32 },
+          { paddingTop: insets.top + 10, paddingBottom: 72 },
         ]}
       >
-        <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+        <View
+          style={[styles.card, { backgroundColor: theme.cardBackground }]}
+          onLayout={(e) => {
+            cardYRef.current = e.nativeEvent.layout.y;
+          }}
+        >
           {stops.length === 0 ? (
             <View style={styles.center}>
               <Ionicons name="bus-outline" size={48} color="#8E8E93" />
@@ -218,11 +274,36 @@ export default function RouteDetailScreen() {
                 isCurrent={item.id === params.stopId}
                 theme={theme}
                 displayName={getStopName(item)}
+                onLayoutCurrent={
+                  item.id === params.stopId
+                    ? handleCurrentStopLayout
+                    : undefined
+                }
               />
             ))
           )}
         </View>
       </ScrollView>
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom > 0 ? 24 : 28 }]}>
+        <Pressable
+          onPress={handleToggleTracking}
+          style={({ pressed }) => [
+            styles.trackButton,
+            isTracked && styles.trackButtonActive,
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Ionicons
+            name={isTracked ? "radio" : "radio-outline"}
+            size={18}
+            color="#fff"
+          />
+          <Text style={styles.trackButtonText}>
+            {isTracked ? "Stop Tracking" : "Track Live Activity"}
+          </Text>
+        </Pressable>
+      </View>
+      </View>
     </>
   );
 }
@@ -306,5 +387,26 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     fontWeight: "500",
+  },
+  bottomBar: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  trackButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "#007AFF",
+  },
+  trackButtonActive: {
+    backgroundColor: "#FF3B30",
+  },
+  trackButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
   },
 });

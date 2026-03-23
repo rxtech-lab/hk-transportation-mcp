@@ -10,12 +10,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/models"
 )
 
 const (
-	gmbBaseURL = "https://data.etagmb.gov.hk"
-	opGMB      = "GMB"
+	gmbBaseURL          = "https://data.etagmb.gov.hk"
+	opGMB               = "GMB"
+	gmbFailedStopsKey   = "gmb:failed_stop_ids"
 )
 
 // GMB regions
@@ -30,27 +32,33 @@ type gmbDestInfo struct {
 
 // GMBClient implements BusAPIClient for Hong Kong Green Minibuses (GMB).
 type GMBClient struct {
-	http *http.Client
-	mu   sync.RWMutex
-	// routeIDMap maps "routeCode:bound:serviceType" → GMB numeric route_id.
-	// Populated during FetchAllRoutes and used by FetchRouteStops.
+	http  *http.Client
+	redis *redis.Client // optional, for persisting failed stop IDs across runs
+	mu    sync.RWMutex
+	// routeIDMap maps "region:routeCode:bound:serviceType" → GMB numeric route_id.
 	routeIDMap map[string]int64
 	// routeCodeToIDs maps route code → slice of GMB numeric route_ids.
-	// Used by FetchETA to look up the route_id from a route code.
 	routeCodeToIDs map[string][]int64
 	// routeDestMap maps "gmbRouteID:routeSeq" → destination info.
-	// Populated during FetchAllRoutes and used by FetchETA.
 	routeDestMap map[string]gmbDestInfo
+	// cachedStopNames caches stop ID → names from FetchRouteStops calls.
+	cachedStopNames map[string][2]string // stopID → [nameEn, nameTc]
 }
 
 // NewGMBClient creates a new GMB API client.
-func NewGMBClient(c *http.Client) *GMBClient {
-	return &GMBClient{
-		http:           c,
-		routeIDMap:     make(map[string]int64),
-		routeCodeToIDs: make(map[string][]int64),
-		routeDestMap:   make(map[string]gmbDestInfo),
+// An optional Redis client can be passed for persisting failed stop IDs across runs.
+func NewGMBClient(c *http.Client, rdb ...*redis.Client) *GMBClient {
+	g := &GMBClient{
+		http:            c,
+		routeIDMap:      make(map[string]int64),
+		routeCodeToIDs:  make(map[string][]int64),
+		routeDestMap:    make(map[string]gmbDestInfo),
+		cachedStopNames: make(map[string][2]string),
 	}
+	if len(rdb) > 0 && rdb[0] != nil {
+		g.redis = rdb[0]
+	}
+	return g
 }
 
 func (g *GMBClient) Operator() string { return opGMB }
@@ -175,7 +183,7 @@ func (g *GMBClient) FetchAllRoutes(ctx context.Context) ([]models.Route, error) 
 					bound := gmbBound(dir.RouteSeq)
 
 					route := models.Route{
-						RouteID:     fmt.Sprintf("GMB-%s-%s-%s", routeCode, bound, svcType),
+						RouteID:     fmt.Sprintf("GMB-%s-%s-%s-%s", region, routeCode, bound, svcType),
 						Route:       routeCode,
 						Bound:       bound,
 						ServiceType: svcType,
@@ -186,7 +194,8 @@ func (g *GMBClient) FetchAllRoutes(ctx context.Context) ([]models.Route, error) 
 					allRoutes = append(allRoutes, route)
 
 					// Store mapping for later use by FetchRouteStops and FetchETA
-					key := routeCode + ":" + bound + ":" + svcType
+					// Key includes region to avoid collisions between same route code in different regions.
+					key := region + ":" + routeCode + ":" + bound + ":" + svcType
 					destKey := fmt.Sprintf("%d:%d", routeInfo.RouteID, dir.RouteSeq)
 					g.mu.Lock()
 					g.routeIDMap[key] = routeInfo.RouteID
@@ -207,68 +216,141 @@ func (g *GMBClient) FetchAllRoutes(ctx context.Context) ([]models.Route, error) 
 }
 
 func (g *GMBClient) FetchAllStops(ctx context.Context) ([]models.BusStop, error) {
-	// GMB has no bulk stop endpoint. Collect unique stop IDs from all
-	// route-stops and fetch each stop individually for coordinates.
-	routes, err := g.FetchAllRoutes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("gmb: fetch routes for stops: %w", err)
-	}
+	// GMB has no bulk stop endpoint. Collect unique stop IDs from
+	// cachedStopIDs (populated by prior FetchRouteStops calls) or by
+	// fetching route-stops from the API.
 
-	// stopInfo collects name and coordinate data per stop.
 	type stopInfo struct {
 		nameEn string
 		nameTc string
 	}
-	stopMap := make(map[string]*stopInfo) // stopID → info
+	stopMap := make(map[string]*stopInfo)
 
-	// Fetch route-stop details for each route to get stop IDs and names.
 	g.mu.RLock()
-	routeIDMapCopy := make(map[string]int64, len(g.routeIDMap))
-	for k, v := range g.routeIDMap {
-		routeIDMapCopy[k] = v
-	}
+	hasCached := len(g.cachedStopNames) > 0
 	g.mu.RUnlock()
 
-	log.Printf("gmb: fetching route-stops for %d routes...", len(routes))
-	for i, r := range routes {
-		if (i+1)%50 == 0 || i+1 == len(routes) {
-			log.Printf("gmb: route-stops progress %d/%d", i+1, len(routes))
+	if hasCached {
+		// Use cached stop IDs from prior FetchRouteStops calls.
+		g.mu.RLock()
+		for sid, names := range g.cachedStopNames {
+			stopMap[sid] = &stopInfo{nameEn: names[0], nameTc: names[1]}
 		}
-		key := r.Route + ":" + r.Bound + ":" + r.ServiceType
-		gmbRouteID, ok := routeIDMapCopy[key]
-		if !ok {
-			continue
+		g.mu.RUnlock()
+		log.Printf("gmb: reusing %d cached stop IDs from FetchRouteStops", len(stopMap))
+	} else {
+		// Fallback: fetch routes and route-stops from API.
+		routes, err := g.FetchAllRoutes(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("gmb: fetch routes for stops: %w", err)
 		}
-		routeSeq := gmbRouteSeq(r.Bound)
-		url := fmt.Sprintf("%s/route-stop/%d/%d", gmbBaseURL, gmbRouteID, routeSeq)
-		var resp gmbResponse[gmbRouteStopData]
-		if err := g.get(ctx, url, &resp); err != nil {
-			continue
+
+		g.mu.RLock()
+		routeIDMapCopy := make(map[string]int64, len(g.routeIDMap))
+		for k, v := range g.routeIDMap {
+			routeIDMapCopy[k] = v
 		}
-		for _, rs := range resp.Data.RouteStops {
-			sid := strconv.FormatInt(rs.StopID, 10)
-			if _, exists := stopMap[sid]; !exists {
-				stopMap[sid] = &stopInfo{nameEn: rs.NameEn, nameTc: rs.NameTc}
+		g.mu.RUnlock()
+
+		log.Printf("gmb: fetching route-stops for %d routes...", len(routes))
+		for i, r := range routes {
+			if (i+1)%50 == 0 || i+1 == len(routes) {
+				log.Printf("gmb: route-stops progress %d/%d", i+1, len(routes))
 			}
-		}
-		if i < len(routes)-1 {
-			time.Sleep(1 * time.Second)
+			var gmbRouteID int64
+			var ok bool
+			for _, reg := range gmbRegions {
+				key := reg + ":" + r.Route + ":" + r.Bound + ":" + r.ServiceType
+				gmbRouteID, ok = routeIDMapCopy[key]
+				if ok {
+					break
+				}
+			}
+			if !ok {
+				continue
+			}
+			routeSeq := gmbRouteSeq(r.Bound)
+			url := fmt.Sprintf("%s/route-stop/%d/%d", gmbBaseURL, gmbRouteID, routeSeq)
+			var resp gmbResponse[gmbRouteStopData]
+			if err := g.get(ctx, url, &resp); err != nil {
+				continue
+			}
+			for _, rs := range resp.Data.RouteStops {
+				sid := strconv.FormatInt(rs.StopID, 10)
+				if _, exists := stopMap[sid]; !exists {
+					stopMap[sid] = &stopInfo{nameEn: rs.NameEn, nameTc: rs.NameTc}
+				}
+			}
+			if i < len(routes)-1 {
+				time.Sleep(1 * time.Second)
+			}
 		}
 	}
 
-	log.Printf("gmb: fetching %d individual stops for coordinates...", len(stopMap))
+	// Load previously failed stop IDs from Redis and prioritize them.
+	var retryIDs []string
+	if g.redis != nil {
+		members, err := g.redis.SMembers(ctx, gmbFailedStopsKey).Result()
+		if err == nil && len(members) > 0 {
+			log.Printf("gmb: %d previously failed stops to retry first", len(members))
+			for _, sid := range members {
+				if _, exists := stopMap[sid]; !exists {
+					// Add to stopMap with empty names (coordinates are what we need).
+					stopMap[sid] = &stopInfo{}
+				}
+				retryIDs = append(retryIDs, sid)
+			}
+		}
+		// Clear the set; we'll re-add any that fail again.
+		g.redis.Del(ctx, gmbFailedStopsKey)
+	}
+
+	// Build ordered list: retry IDs first, then remaining stops.
+	retrySet := make(map[string]struct{}, len(retryIDs))
+	orderedIDs := make([]string, 0, len(stopMap))
+	for _, sid := range retryIDs {
+		retrySet[sid] = struct{}{}
+		orderedIDs = append(orderedIDs, sid)
+	}
+	for sid := range stopMap {
+		if _, isRetry := retrySet[sid]; !isRetry {
+			orderedIDs = append(orderedIDs, sid)
+		}
+	}
+
+	log.Printf("gmb: fetching %d individual stops for coordinates (%d retries)...", len(orderedIDs), len(retryIDs))
 
 	var stops []models.BusStop
+	var failedIDs []string
 	stopCount := 0
-	totalStops := len(stopMap)
-	for sid, info := range stopMap {
+	totalStops := len(orderedIDs)
+	for _, sid := range orderedIDs {
+		info := stopMap[sid]
 		stopIDInt, err := strconv.ParseInt(sid, 10, 64)
 		if err != nil {
 			continue
 		}
+
+		// Retry with backoff on 403 (rate limiting).
 		var resp gmbResponse[gmbStopData]
-		if err := g.get(ctx, fmt.Sprintf("%s/stop/%d", gmbBaseURL, stopIDInt), &resp); err != nil {
-			log.Printf("gmb: fetch stop %s: %v", sid, err)
+		url := fmt.Sprintf("%s/stop/%d", gmbBaseURL, stopIDInt)
+		fetched := false
+		for attempt := 0; attempt < 3; attempt++ {
+			if err := g.get(ctx, url, &resp); err != nil {
+				if attempt < 2 {
+					backoff := time.Duration(5*(attempt+1)) * time.Second
+					log.Printf("gmb: fetch stop %s: %v (retrying in %v)", sid, err, backoff)
+					time.Sleep(backoff)
+					continue
+				}
+				log.Printf("gmb: fetch stop %s: %v (giving up)", sid, err)
+			} else {
+				fetched = true
+			}
+			break
+		}
+		if !fetched {
+			failedIDs = append(failedIDs, sid)
 			continue
 		}
 
@@ -290,18 +372,40 @@ func (g *GMBClient) FetchAllStops(ctx context.Context) ([]models.BusStop, error)
 		}
 	}
 
-	log.Printf("gmb: fetched %d stops", len(stops))
+	// Persist failed stop IDs to Redis for the next run.
+	if g.redis != nil && len(failedIDs) > 0 {
+		members := make([]interface{}, len(failedIDs))
+		for i, id := range failedIDs {
+			members[i] = id
+		}
+		if err := g.redis.SAdd(ctx, gmbFailedStopsKey, members...).Err(); err != nil {
+			log.Printf("gmb: failed to save %d failed stop IDs to Redis: %v", len(failedIDs), err)
+		} else {
+			log.Printf("gmb: saved %d failed stop IDs to Redis for next run", len(failedIDs))
+		}
+	}
+
+	log.Printf("gmb: fetched %d stops (%d failed)", len(stops), len(failedIDs))
 	return stops, nil
 }
 
 func (g *GMBClient) FetchRouteStops(ctx context.Context, route, bound, serviceType string) ([]models.RouteStop, error) {
-	key := route + ":" + bound + ":" + serviceType
+	// Try all regions to find the matching key (key includes region prefix).
 	g.mu.RLock()
-	gmbRouteID, ok := g.routeIDMap[key]
+	var gmbRouteID int64
+	var region string
+	for _, r := range gmbRegions {
+		key := r + ":" + route + ":" + bound + ":" + serviceType
+		if id, ok := g.routeIDMap[key]; ok {
+			gmbRouteID = id
+			region = r
+			break
+		}
+	}
 	g.mu.RUnlock()
 
-	if !ok {
-		return nil, fmt.Errorf("gmb: unknown route key %q (call FetchAllRoutes first)", key)
+	if region == "" {
+		return nil, fmt.Errorf("gmb: unknown route key %q (call FetchAllRoutes first)", route+":"+bound+":"+serviceType)
 	}
 
 	routeSeq := gmbRouteSeq(bound)
@@ -311,16 +415,23 @@ func (g *GMBClient) FetchRouteStops(ctx context.Context, route, bound, serviceTy
 		return nil, err
 	}
 
-	routeID := fmt.Sprintf("GMB-%s-%s-%s", route, bound, serviceType)
+	routeID := fmt.Sprintf("GMB-%s-%s-%s-%s", region, route, bound, serviceType)
 	stops := make([]models.RouteStop, 0, len(resp.Data.RouteStops))
+	g.mu.Lock()
 	for _, rs := range resp.Data.RouteStops {
+		sid := strconv.FormatInt(rs.StopID, 10)
 		stops = append(stops, models.RouteStop{
 			RouteID:  routeID,
-			StopID:   strconv.FormatInt(rs.StopID, 10),
+			StopID:   sid,
 			StopSeq:  rs.StopSeq,
 			Operator: opGMB,
 		})
+		// Cache stop ID and name for FetchAllStops to reuse.
+		if _, exists := g.cachedStopNames[sid]; !exists {
+			g.cachedStopNames[sid] = [2]string{rs.NameEn, rs.NameTc}
+		}
 	}
+	g.mu.Unlock()
 	return stops, nil
 }
 

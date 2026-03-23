@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -16,10 +16,16 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   LandingHeader,
   SuggestionChips,
+  type SuggestionItem,
 } from "@/components/landing/LandingView";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { useTheme } from "@/hooks/use-theme";
-import { createSession, listSessions, migrateLegacyData } from "@/lib/db";
+import {
+  createSession,
+  listSessions,
+  migrateLegacyData,
+  type ChatSessionMeta,
+} from "@/lib/db";
 import { useI18n } from "@/lib/i18n/i18n-provider";
 
 export default function LandingScreen() {
@@ -27,8 +33,7 @@ export default function LandingScreen() {
   const router = useRouter();
   const { dict } = useI18n();
   const theme = useTheme();
-  const [hasSession, setHasSession] = useState(false);
-  const [latestSessionId, setLatestSessionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ChatSessionMeta[]>([]);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   useEffect(() => {
@@ -47,12 +52,26 @@ export default function LandingScreen() {
   useFocusEffect(
     useCallback(() => {
       migrateLegacyData().then(() => {
-        const sessions = listSessions();
-        setHasSession(sessions.length > 0);
-        setLatestSessionId(sessions.length > 0 ? sessions[0].id : null);
+        setSessions(listSessions());
       });
     }, []),
   );
+
+  const hasSession = sessions.length > 0;
+  const latestSessionId = hasSession ? sessions[0].id : null;
+
+  // Build dynamic suggestion chips from history
+  const suggestionItems = useMemo((): SuggestionItem[] | undefined => {
+    const titledSessions = sessions.filter((s) => s.title);
+    if (titledSessions.length < 2) return undefined; // use defaults
+    return [
+      { text: dict.landing.suggestions[0], icon: "location" },
+      ...titledSessions.slice(0, 2).map((s) => ({
+        text: s.title!,
+        icon: "time" as const,
+      })),
+    ];
+  }, [sessions, dict.landing.suggestions]);
 
   const handleSend = useCallback(
     (text: string) => {
@@ -115,7 +134,7 @@ export default function LandingScreen() {
             </Pressable>
           )}
 
-          <SuggestionChips onSuggestion={handleSend} />
+          <SuggestionChips onSuggestion={handleSend} items={suggestionItems} />
         </Pressable>
       </ScrollView>
 

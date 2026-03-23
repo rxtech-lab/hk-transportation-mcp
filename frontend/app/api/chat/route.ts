@@ -99,6 +99,8 @@ export async function POST(req: Request) {
       stopWhen: stepCountIs(20),
       system: `You are an HK bus transportation assistant. Help users find bus routes, nearby stops, and arrival times in Hong Kong.
 
+When querying for minibus (小巴) routes or stops, use "GMB" as the operator.
+
 When you need the user's location (e.g. for nearby stops or location-based queries), call the get_user_location tool to retrieve their GPS coordinates. Do not assume the user's location — always request it via the tool when needed.
 
 IMPORTANT: When mentioning any location, bus stop, or place with known coordinates, you MUST use this special syntax:

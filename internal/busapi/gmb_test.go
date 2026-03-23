@@ -111,8 +111,8 @@ func TestGMBClientFetchAllRoutes(t *testing.T) {
 			if r.DestEn != "Stanley" {
 				t.Errorf("expected dest Stanley, got %s", r.DestEn)
 			}
-			if r.RouteID != "GMB-1A-O-1" {
-				t.Errorf("expected routeID GMB-1A-O-1, got %s", r.RouteID)
+			if r.RouteID != "GMB-HKI-1A-O-1" {
+				t.Errorf("expected routeID GMB-HKI-1A-O-1, got %s", r.RouteID)
 			}
 		}
 	}
@@ -122,10 +122,10 @@ func TestGMBClientFetchAllRoutes(t *testing.T) {
 
 	// Verify route ID map was populated
 	client.mu.RLock()
-	if _, ok := client.routeIDMap["1A:O:1"]; !ok {
+	if _, ok := client.routeIDMap["HKI:1A:O:1"]; !ok {
 		t.Error("routeIDMap missing key 1A:O:1")
 	}
-	if _, ok := client.routeIDMap["1A:I:1"]; !ok {
+	if _, ok := client.routeIDMap["HKI:1A:I:1"]; !ok {
 		t.Error("routeIDMap missing key 1A:I:1")
 	}
 	ids := client.routeCodeToIDs["1A"]
@@ -269,7 +269,7 @@ func TestGMBClientFetchRouteStops(t *testing.T) {
 	client := newTestGMBClient(srv)
 
 	// Pre-populate the route ID map
-	client.routeIDMap["1A:O:1"] = 2003045
+	client.routeIDMap["HKI:1A:O:1"] = 2003045
 
 	stops, err := client.FetchRouteStops(context.Background(), "1A", "O", "1")
 	if err != nil {
@@ -286,8 +286,8 @@ func TestGMBClientFetchRouteStops(t *testing.T) {
 	if stops[0].StopSeq != 1 {
 		t.Errorf("expected first stop seq 1, got %d", stops[0].StopSeq)
 	}
-	if stops[0].RouteID != "GMB-1A-O-1" {
-		t.Errorf("expected routeID GMB-1A-O-1, got %s", stops[0].RouteID)
+	if stops[0].RouteID != "GMB-HKI-1A-O-1" {
+		t.Errorf("expected routeID GMB-HKI-1A-O-1, got %s", stops[0].RouteID)
 	}
 	if stops[0].Operator != "GMB" {
 		t.Errorf("expected operator GMB, got %s", stops[0].Operator)

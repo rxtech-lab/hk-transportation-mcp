@@ -55,7 +55,11 @@ export interface Dictionary {
   };
   history: {
     readonly title: string;
+    readonly chatHistory: string;
+    readonly trackingHistory: string;
     readonly empty: string;
+    readonly trackingEmpty: string;
+    readonly trackingCount: string;
     readonly delete: string;
     readonly untitled: string;
   };

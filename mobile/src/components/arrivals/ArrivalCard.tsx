@@ -1,26 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActionSheetIOS,
-  Alert,
   View,
   Text,
   Pressable,
-  Platform,
   StyleSheet,
   ActivityIndicator,
   ScrollView,
   Animated,
 } from "react-native";
+import { useRouter, useSegments } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { EtaPill } from "./EtaPill";
 import { useTheme } from "@/hooks/use-theme";
 import { useLocalizedStopName, useLocalizedDestination } from "@/lib/i18n/i18n-provider";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
-import {
-  startTracking,
-  stopTracking,
-  getTrackedInfo,
-} from "@/lib/live-activity";
+import { getTrackedInfo } from "@/lib/live-activity";
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], {
@@ -48,14 +42,16 @@ export function ArrivalCard({
   onHeaderPress?: () => void;
 }) {
   const theme = useTheme();
+  const router = useRouter();
+  const segments = useSegments();
   const getStopName = useLocalizedStopName();
   const getDestination = useLocalizedDestination();
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const prevRefreshing = useRef(isRefreshing);
-  const [trackedKey, setTrackedKey] = useState<string | null>(() => {
+  const trackedKey = (() => {
     const info = getTrackedInfo();
     return info ? `${info.route}:${info.stopId}` : null;
-  });
+  })();
 
   useEffect(() => {
     if (prevRefreshing.current !== isRefreshing) {
@@ -71,70 +67,18 @@ export function ArrivalCard({
 
   const handleRouteBadgePress = useCallback(
     (stop: (typeof data.stops)[number], arrival: (typeof data.stops)[number]["arrivals"][number]) => {
-      const key = `${arrival.route}:${stop.id}`;
-      const isCurrentlyTracked = trackedKey === key;
-      const localizedName = getStopName(stop);
-      const localizedDest = getDestination(arrival);
-
-      if (Platform.OS === "ios") {
-        ActionSheetIOS.showActionSheetWithOptions(
-          {
-            title: `${arrival.route} → ${localizedDest}`,
-            message: `at ${localizedName}`,
-            options: isCurrentlyTracked
-              ? ["Stop Tracking", "Cancel"]
-              : ["Track in Live Activity", "Cancel"],
-            cancelButtonIndex: 1,
-            destructiveButtonIndex: isCurrentlyTracked ? 0 : undefined,
-          },
-          async (buttonIndex) => {
-            if (buttonIndex === 0) {
-              if (isCurrentlyTracked) {
-                await stopTracking();
-                setTrackedKey(null);
-              } else {
-                const ok = await startTracking({
-                  route: arrival.route,
-                  stopName: localizedName,
-                  stopId: stop.id,
-                  destination: localizedDest,
-                  etas: arrival.etas,
-                });
-                if (ok) setTrackedKey(key);
-              }
-            }
-          },
-        );
-      } else {
-        Alert.alert(
-          `${arrival.route} → ${localizedDest}`,
-          `at ${localizedName}`,
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: isCurrentlyTracked ? "Stop Tracking" : "Track in Live Activity",
-              style: isCurrentlyTracked ? "destructive" : "default",
-              onPress: async () => {
-                if (isCurrentlyTracked) {
-                  await stopTracking();
-                  setTrackedKey(null);
-                } else {
-                  const ok = await startTracking({
-                    route: arrival.route,
-                    stopName: localizedName,
-                    stopId: stop.id,
-                    destination: localizedDest,
-                    etas: arrival.etas,
-                  });
-                  if (ok) setTrackedKey(key);
-                }
-              },
-            },
-          ],
-        );
-      }
+      const dest = getDestination(arrival);
+      const routePrefix = segments[0] === "history" ? "/history" : "/(transport)";
+      router.push({
+        pathname: `${routePrefix}/route` as any,
+        params: {
+          route: arrival.route,
+          stopId: stop.id,
+          destination: dest,
+        },
+      });
     },
-    [trackedKey, data, getStopName, getDestination],
+    [router, segments, getDestination],
   );
 
   return (

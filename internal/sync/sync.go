@@ -49,47 +49,7 @@ func (s *Syncer) FullSync(ctx context.Context) error {
 		go func(c busapi.BusAPIClient) {
 			defer wg.Done()
 
-			// --- Stops ---
-			log.Printf("sync: %s: fetching stops...", c.Operator())
-			stops, err := c.FetchAllStops(ctx)
-			if err != nil {
-				log.Printf("sync: %s: fetch stops: %v", c.Operator(), err)
-				mu.Lock()
-				if firstErr == nil {
-					firstErr = fmt.Errorf("%s stops: %w", c.Operator(), err)
-				}
-				mu.Unlock()
-				return
-			}
-			log.Printf("sync: %s: fetched %d stops", c.Operator(), len(stops))
-
-			// Deduplicate and write stops immediately
-			mu.Lock()
-			var uniqueStops []models.BusStop
-			for _, stop := range stops {
-				if _, exists := seenStops[stop.StopID]; !exists {
-					seenStops[stop.StopID] = struct{}{}
-					uniqueStops = append(uniqueStops, stop)
-					allStops = append(allStops, stop)
-				}
-			}
-			mu.Unlock()
-
-			if len(uniqueStops) > 0 {
-				log.Printf("sync: %s: writing %d stops to database (%d duplicates skipped)...",
-					c.Operator(), len(uniqueStops), len(stops)-len(uniqueStops))
-				if err := s.upsertStops(ctx, uniqueStops); err != nil {
-					log.Printf("sync: %s: upsert stops: %v", c.Operator(), err)
-					mu.Lock()
-					if firstErr == nil {
-						firstErr = fmt.Errorf("%s upsert stops: %w", c.Operator(), err)
-					}
-					mu.Unlock()
-					return
-				}
-			}
-
-			// --- Routes ---
+			// --- Routes (fetch first so GMB routeIDMap is populated before stops) ---
 			log.Printf("sync: %s: fetching routes...", c.Operator())
 			routes, err := c.FetchAllRoutes(ctx)
 			if err != nil {
@@ -150,6 +110,46 @@ func (s *Syncer) FullSync(ctx context.Context) error {
 			mu.Lock()
 			allRStops = append(allRStops, routeStops...)
 			mu.Unlock()
+
+			// --- Stops ---
+			log.Printf("sync: %s: fetching stops...", c.Operator())
+			stops, err := c.FetchAllStops(ctx)
+			if err != nil {
+				log.Printf("sync: %s: fetch stops: %v", c.Operator(), err)
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = fmt.Errorf("%s stops: %w", c.Operator(), err)
+				}
+				mu.Unlock()
+				return
+			}
+			log.Printf("sync: %s: fetched %d stops", c.Operator(), len(stops))
+
+			// Deduplicate and write stops immediately
+			mu.Lock()
+			var uniqueStops []models.BusStop
+			for _, stop := range stops {
+				if _, exists := seenStops[stop.StopID]; !exists {
+					seenStops[stop.StopID] = struct{}{}
+					uniqueStops = append(uniqueStops, stop)
+					allStops = append(allStops, stop)
+				}
+			}
+			mu.Unlock()
+
+			if len(uniqueStops) > 0 {
+				log.Printf("sync: %s: writing %d stops to database (%d duplicates skipped)...",
+					c.Operator(), len(uniqueStops), len(stops)-len(uniqueStops))
+				if err := s.upsertStops(ctx, uniqueStops); err != nil {
+					log.Printf("sync: %s: upsert stops: %v", c.Operator(), err)
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = fmt.Errorf("%s upsert stops: %w", c.Operator(), err)
+					}
+					mu.Unlock()
+					return
+				}
+			}
 
 			log.Printf("sync: %s: done — %d stops, %d routes, %d route-stops",
 				c.Operator(), len(uniqueStops), len(routes), len(routeStops))
@@ -222,6 +222,18 @@ func (s *Syncer) upsertStops(ctx context.Context, stops []models.BusStop) error 
 }
 
 func (s *Syncer) upsertRoutes(ctx context.Context, routes []models.Route) error {
+	// Deduplicate by route_id to avoid "ON CONFLICT DO UPDATE cannot affect
+	// row a second time" when the same route_id appears multiple times.
+	seen := make(map[string]struct{}, len(routes))
+	deduped := make([]models.Route, 0, len(routes))
+	for _, r := range routes {
+		if _, exists := seen[r.RouteID]; !exists {
+			seen[r.RouteID] = struct{}{}
+			deduped = append(deduped, r)
+		}
+	}
+	routes = deduped
+
 	for i := 0; i < len(routes); i += batchSize {
 		end := i + batchSize
 		if end > len(routes) {
@@ -251,6 +263,19 @@ func (s *Syncer) upsertRoutes(ctx context.Context, routes []models.Route) error 
 }
 
 func (s *Syncer) upsertRouteStops(ctx context.Context, routeStops []models.RouteStop) error {
+	// Deduplicate by (route_id, stop_id, stop_seq) to avoid batch conflicts.
+	type rsKey struct{ routeID, stopID string; seq int }
+	seen := make(map[rsKey]struct{}, len(routeStops))
+	deduped := make([]models.RouteStop, 0, len(routeStops))
+	for _, rs := range routeStops {
+		k := rsKey{rs.RouteID, rs.StopID, rs.StopSeq}
+		if _, exists := seen[k]; !exists {
+			seen[k] = struct{}{}
+			deduped = append(deduped, rs)
+		}
+	}
+	routeStops = deduped
+
 	for i := 0; i < len(routeStops); i += batchSize {
 		end := i + batchSize
 		if end > len(routeStops) {
