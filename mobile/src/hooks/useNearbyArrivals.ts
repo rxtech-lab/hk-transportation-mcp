@@ -18,7 +18,7 @@ async function fetchNearbyArrivals(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       stops: [{ lat, lng }],
-      nearbyRadius: 50,
+      nearbyRadius: 100,
     }),
   });
   if (!res.ok) throw new Error("Failed to fetch nearby arrivals");

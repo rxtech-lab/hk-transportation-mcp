@@ -49,8 +49,12 @@ export default {
     noStops: "No stops found",
   },
   history: {
-    title: "Chat History",
+    title: "History",
+    chatHistory: "Chats",
+    trackingHistory: "Tracking",
     empty: "No conversations yet",
+    trackingEmpty: "No tracked routes yet",
+    trackingCount: "{0} times",
     delete: "Delete",
     untitled: "Untitled Chat",
   },

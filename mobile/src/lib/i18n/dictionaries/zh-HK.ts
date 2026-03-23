@@ -49,8 +49,12 @@ export default {
     noStops: "找不到車站",
   },
   history: {
-    title: "對話紀錄",
+    title: "歷史",
+    chatHistory: "對話",
+    trackingHistory: "追蹤",
     empty: "暫無對話紀錄",
+    trackingEmpty: "暫無追蹤記錄",
+    trackingCount: "{0} 次",
     delete: "刪除",
     untitled: "未命名對話",
   },

@@ -21,6 +21,14 @@ db.execSync(`
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
   );
   CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, seq);
+
+  CREATE TABLE IF NOT EXISTS route_tracking (
+    route TEXT NOT NULL,
+    destination TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 1,
+    last_tracked_at INTEGER NOT NULL,
+    PRIMARY KEY (route, destination)
+  );
 `);
 
 export interface ChatSessionMeta {
@@ -114,6 +122,65 @@ export function getSessionTitle(id: string): string | null {
 
 export function updateSessionTitle(id: string, title: string): void {
   db.runSync("UPDATE sessions SET title = ? WHERE id = ?", [title, id]);
+}
+
+// ── Route tracking ──────────────────────────────────────────────
+
+export interface RouteTrackingMeta {
+  route: string;
+  destination: string;
+  count: number;
+  lastTrackedAt: number;
+}
+
+export function incrementRouteTracking(
+  route: string,
+  destination: string,
+): void {
+  const now = Date.now();
+  db.runSync(
+    `INSERT INTO route_tracking (route, destination, count, last_tracked_at)
+     VALUES (?, ?, 1, ?)
+     ON CONFLICT(route, destination)
+     DO UPDATE SET count = count + 1, last_tracked_at = ?`,
+    [route, destination, now, now],
+  );
+}
+
+export function getRouteTrackingCounts(): Map<string, number> {
+  const rows = db.getAllSync<{ route: string; destination: string; count: number }>(
+    "SELECT route, destination, count FROM route_tracking",
+  );
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    map.set(`${r.route}|${r.destination}`, r.count);
+  }
+  return map;
+}
+
+export function listRouteTracking(): RouteTrackingMeta[] {
+  const rows = db.getAllSync<{
+    route: string;
+    destination: string;
+    count: number;
+    last_tracked_at: number;
+  }>("SELECT * FROM route_tracking ORDER BY count DESC");
+  return rows.map((r) => ({
+    route: r.route,
+    destination: r.destination,
+    count: r.count,
+    lastTrackedAt: r.last_tracked_at,
+  }));
+}
+
+export function deleteRouteTracking(
+  route: string,
+  destination: string,
+): void {
+  db.runSync(
+    "DELETE FROM route_tracking WHERE route = ? AND destination = ?",
+    [route, destination],
+  );
 }
 
 // Migrate legacy AsyncStorage data

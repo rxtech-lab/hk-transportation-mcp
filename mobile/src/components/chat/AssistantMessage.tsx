@@ -88,11 +88,22 @@ export function AssistantMessage({
             );
           }
 
+          const partAny = part as Record<string, unknown>;
+          const errorMsg =
+            part.state === "output-error"
+              ? partAny.output
+                ? typeof partAny.output === "string"
+                  ? partAny.output
+                  : JSON.stringify(partAny.output)
+                : "Connection interrupted — tap for details"
+              : undefined;
+
           return (
             <View key={part.toolCallId} style={styles.toolRow}>
               <ToolCallBadge
                 toolName={toolName}
                 state={part.state}
+                errorMessage={errorMsg}
                 onPress={
                   onToolPress
                     ? () =>

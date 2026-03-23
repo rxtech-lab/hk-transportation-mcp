@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useI18n } from "@/lib/i18n/i18n-provider";
 import { useTheme } from "@/hooks/use-theme";
 
-const SUGGESTION_ICONS: Record<number, keyof typeof Ionicons.glyphMap> = {
+const DEFAULT_ICONS: Record<number, keyof typeof Ionicons.glyphMap> = {
   0: "location",
   1: "navigate",
   2: "time",
@@ -31,20 +31,34 @@ export function LandingHeader() {
   );
 }
 
+export interface SuggestionItem {
+  text: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}
+
 export function SuggestionChips({
   onSuggestion,
+  items,
 }: {
   onSuggestion: (text: string) => void;
+  items?: SuggestionItem[];
 }) {
   const { dict } = useI18n();
   const theme = useTheme();
 
+  const chips: SuggestionItem[] =
+    items ??
+    dict.landing.suggestions.map((text, i) => ({
+      text,
+      icon: DEFAULT_ICONS[i] ?? "chatbubble",
+    }));
+
   return (
     <View style={styles.suggestions}>
-      {dict.landing.suggestions.map((suggestion, index) => (
+      {chips.map((chip) => (
         <Pressable
-          key={suggestion}
-          onPress={() => onSuggestion(suggestion)}
+          key={chip.text}
+          onPress={() => onSuggestion(chip.text)}
           style={({ pressed }) => [
             styles.suggestionCard,
             { backgroundColor: theme.inputBackground },
@@ -53,13 +67,13 @@ export function SuggestionChips({
         >
           <View style={styles.suggestionIconWrap}>
             <Ionicons
-              name={SUGGESTION_ICONS[index] ?? "chatbubble"}
+              name={chip.icon}
               size={16}
               color="#007AFF"
             />
           </View>
           <Text style={[styles.suggestionText, { color: theme.text }]} numberOfLines={2}>
-            {suggestion}
+            {chip.text}
           </Text>
           <Ionicons
             name="chevron-forward"

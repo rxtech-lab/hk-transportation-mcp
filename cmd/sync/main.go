@@ -12,6 +12,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/busapi"
+	"github.com/rxtech-lab/hk-transportation-mcp/internal/cache"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/config"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/database"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/geo"
@@ -37,10 +38,24 @@ func main() {
 	}
 	defer db.Close()
 
+	// Connect to Redis for GMB failed-stop retry queue.
+	redisCache, err := cache.New(cfg.RedisURL)
+	if err != nil {
+		log.Printf("Warning: Redis unavailable, GMB failed-stop retries disabled: %v", err)
+	}
+	if redisCache != nil {
+		defer redisCache.Close()
+	}
+
 	httpClient := busapi.NewHTTPClient()
 	kmbClient := busapi.NewKMBClient(httpClient)
 	citybusClient := busapi.NewCitybusClient(httpClient)
-	gmbClient := busapi.NewGMBClient(httpClient)
+	var gmbClient *busapi.GMBClient
+	if redisCache != nil {
+		gmbClient = busapi.NewGMBClient(httpClient, redisCache.Client())
+	} else {
+		gmbClient = busapi.NewGMBClient(httpClient)
+	}
 
 	// Build operator filter set
 	selected := make(map[string]bool)

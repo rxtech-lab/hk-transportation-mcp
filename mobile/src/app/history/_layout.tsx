@@ -34,7 +34,7 @@ export default function HistoryLayout() {
         contentStyle: { backgroundColor: theme.backgroundSecondary },
       }}
     >
-      <Stack.Screen name="index" options={{ title: dict.history.title }} />
+      <Stack.Screen name="index" options={{ title: dict.history.title, headerShown: false }} />
       <Stack.Screen
         name="chat"
         options={{
@@ -59,6 +59,15 @@ export default function HistoryLayout() {
           headerShown: true,
           headerShadowVisible: false,
           title: "",
+          contentStyle: { backgroundColor: theme.backgroundSecondary },
+        }}
+      />
+      <Stack.Screen
+        name="route"
+        options={{
+          presentation: "formSheet",
+          headerShown: true,
+          headerShadowVisible: false,
           contentStyle: { backgroundColor: theme.backgroundSecondary },
         }}
       />

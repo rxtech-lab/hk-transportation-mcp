@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { View, StyleSheet, Pressable, Animated, Easing } from "react-native";
+import { View, Text, StyleSheet, Pressable, Animated, Easing } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -66,10 +66,12 @@ function PulsingDots({ color }: { color: string }) {
 export function ToolCallBadge({
   toolName,
   state,
+  errorMessage,
   onPress,
 }: {
   toolName: string;
   state: string;
+  errorMessage?: string;
   onPress?: () => void;
 }) {
   const theme = useTheme();
@@ -96,6 +98,13 @@ export function ToolCallBadge({
         </Animated.Text>
         {!isDone && !isError && <PulsingDots color={textColor} />}
       </View>
+      {isError && errorMessage ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText} numberOfLines={3}>
+            {errorMessage}
+          </Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -125,5 +134,15 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
+  },
+  errorContainer: {
+    marginTop: 4,
+    paddingHorizontal: 12,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#f87171",
+    fontFamily: "monospace",
+    lineHeight: 16,
   },
 });
