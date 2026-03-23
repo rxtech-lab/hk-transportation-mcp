@@ -229,7 +229,11 @@ func (g *GMBClient) FetchAllStops(ctx context.Context) ([]models.BusStop, error)
 	}
 	g.mu.RUnlock()
 
-	for _, r := range routes {
+	log.Printf("gmb: fetching route-stops for %d routes...", len(routes))
+	for i, r := range routes {
+		if (i+1)%50 == 0 || i+1 == len(routes) {
+			log.Printf("gmb: route-stops progress %d/%d", i+1, len(routes))
+		}
 		key := r.Route + ":" + r.Bound + ":" + r.ServiceType
 		gmbRouteID, ok := routeIDMapCopy[key]
 		if !ok {
@@ -247,11 +251,16 @@ func (g *GMBClient) FetchAllStops(ctx context.Context) ([]models.BusStop, error)
 				stopMap[sid] = &stopInfo{nameEn: rs.NameEn, nameTc: rs.NameTc}
 			}
 		}
+		if i < len(routes)-1 {
+			time.Sleep(1 * time.Second)
+		}
 	}
 
 	log.Printf("gmb: fetching %d individual stops for coordinates...", len(stopMap))
 
 	var stops []models.BusStop
+	stopCount := 0
+	totalStops := len(stopMap)
 	for sid, info := range stopMap {
 		stopIDInt, err := strconv.ParseInt(sid, 10, 64)
 		if err != nil {
@@ -272,6 +281,13 @@ func (g *GMBClient) FetchAllStops(ctx context.Context) ([]models.BusStop, error)
 			Lon:      resp.Data.Coordinates.WGS84.Longitude,
 			Operator: opGMB,
 		})
+		stopCount++
+		if stopCount%50 == 0 || stopCount == totalStops {
+			log.Printf("gmb: stop coordinates progress %d/%d", stopCount, totalStops)
+		}
+		if stopCount < totalStops {
+			time.Sleep(1 * time.Second)
+		}
 	}
 
 	log.Printf("gmb: fetched %d stops", len(stops))

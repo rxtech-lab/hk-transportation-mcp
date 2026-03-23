@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter, useLocalSearchParams, useSegments } from "expo-router";
 
 import * as Haptics from "expo-haptics";
+import { useThrottle } from "@uidotdev/usehooks";
 
 import { ChatMessagesList } from "@/components/chat/ChatMessages";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -99,6 +100,26 @@ export default function ChatScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   }, [status]);
+
+  // Haptic feedback as new text streams in (throttled)
+  const streamingTextLength = useMemo(() => {
+    if (status !== "streaming") return 0;
+    const lastMsg = messages[messages.length - 1];
+    if (!lastMsg || lastMsg.role !== "assistant") return 0;
+    return lastMsg.parts
+      .filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .reduce((len, p) => len + p.text.length, 0);
+  }, [messages, status]);
+
+  const throttledTextLength = useThrottle(streamingTextLength, 300);
+  const prevTextLengthRef = useRef(0);
+
+  useEffect(() => {
+    if (throttledTextLength > prevTextLengthRef.current && status === "streaming") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    prevTextLengthRef.current = throttledTextLength;
+  }, [throttledTextLength, status]);
 
   useChatSessionStorage(currentChatId, messages);
 

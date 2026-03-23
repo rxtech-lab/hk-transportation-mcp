@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useDictionary, useLocalizedStopName, useLocalizedDestination } from "@/
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useNearbyArrivals } from "@/hooks/useNearbyArrivals";
 import { EtaPill } from "@/components/arrivals/EtaPill";
+import * as Haptics from "expo-haptics";
 import type { ArrivalData, StopData } from "@/lib/types";
 
 interface Section {
@@ -49,8 +50,19 @@ export default function NearbyScreen() {
   const router = useRouter();
   const [locationRequested, setLocationRequested] = useState(false);
 
-  const { stops, isLoading, isRefreshing, refetch } =
+  const { stops, isLoading, isRefreshing, lastRefreshedAt, refetch } =
     useNearbyArrivals(geo.latitude, geo.longitude);
+
+  // Haptic feedback when nearby arrivals data refreshes
+  const initialLoadRef = useRef(true);
+  useEffect(() => {
+    if (!lastRefreshedAt) return;
+    if (initialLoadRef.current) {
+      initialLoadRef.current = false;
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [lastRefreshedAt]);
 
   const sections = buildSections(stops, getStopName);
 
