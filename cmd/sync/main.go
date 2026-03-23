@@ -35,7 +35,8 @@ func main() {
 	httpClient := busapi.NewHTTPClient()
 	kmbClient := busapi.NewKMBClient(httpClient)
 	citybusClient := busapi.NewCitybusClient(httpClient)
-	clients := []busapi.BusAPIClient{kmbClient, citybusClient}
+	gmbClient := busapi.NewGMBClient(httpClient)
+	clients := []busapi.BusAPIClient{kmbClient, citybusClient, gmbClient}
 
 	index := geo.NewStopIndex(db)
 
