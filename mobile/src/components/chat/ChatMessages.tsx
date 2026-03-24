@@ -106,7 +106,7 @@ export function ChatMessagesList({
   const segments = useSegments();
   const routePrefix = segments[0] === "history" ? "/history" : "/(transport)";
   const { setToolCallData } = use(ToolCallSheetContext);
-  const { fetchedArrivals } = useContext(ChatStreamContext);
+  const { fetchedArrivals, fetchedArrivalsVersion } = useContext(ChatStreamContext);
 
   const handleToolPress = useCallback((info: ToolCallInfo) => {
     setToolCallData(info);
@@ -269,7 +269,7 @@ export function ChatMessagesList({
         />
       );
     },
-    [arrivalsData, onLocationClick, lastRefreshedAt, onRefresh, isRefreshing, onArrivalsExpand, handleToolPress]
+    [arrivalsData, fetchedArrivalsVersion, onLocationClick, lastRefreshedAt, onRefresh, isRefreshing, onArrivalsExpand, handleToolPress]
   );
 
   return (
