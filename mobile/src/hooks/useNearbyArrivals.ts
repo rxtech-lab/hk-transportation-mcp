@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { BACKEND_URL } from "@/lib/config";
 import type { StopData } from "@/lib/types";
@@ -18,7 +18,7 @@ async function fetchNearbyArrivals(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       stops: [{ lat, lng }],
-      nearbyRadius: 100,
+      nearbyRadius: 150,
     }),
   });
   if (!res.ok) throw new Error("Failed to fetch nearby arrivals");
@@ -48,8 +48,10 @@ export function useNearbyArrivals(lat: number | null, lng: number | null) {
     queryKey: ["nearby-arrivals", roundedLat, roundedLng],
     queryFn: () => fetchNearbyArrivals(lat!, lng!),
     enabled,
+    staleTime: REFRESH_INTERVAL,
     refetchInterval: REFRESH_INTERVAL,
     refetchIntervalInBackground: false,
+    placeholderData: keepPreviousData,
   });
 
   return {

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { isToolUIPart, type UIMessage } from "ai";
-import type { DisplayArrivalsInput, MapData, MapStop } from "@/lib/types";
+import type { DisplayArrivalsInput, MapData, MapStop, StopData } from "@/lib/types";
 import { ROUTE_COLORS } from "@/constants/map";
 
 export function extractMapData(
@@ -25,10 +25,7 @@ export function extractMapData(
     }
   }
 
-  const freshArrivals = new Map<
-    string,
-    DisplayArrivalsInput["stops"][0]
-  >();
+  const freshArrivals = new Map<string, StopData>();
   if (arrivalsData?.stops) {
     for (const s of arrivalsData.stops) {
       const key = s.id || `${s.lat},${s.lng}`;
@@ -50,8 +47,10 @@ export function extractMapData(
       if (toolName === "display_arrivals" && part.input) {
         if (part.toolCallId !== lastArrivalsId) continue;
         const input = part.input as DisplayArrivalsInput;
-        if (input.stops) {
-          for (const stop of input.stops) {
+        // Use arrivalsData stops for URL-based flow where input.stops is empty
+        const stopsSource = input.stops?.length ? input.stops : arrivalsData?.stops;
+        if (stopsSource) {
+          for (const stop of stopsSource) {
             if (typeof stop.lat === "number" && typeof stop.lng === "number") {
               const key = stop.id || `${stop.lat},${stop.lng}`;
               const fresh = freshArrivals.get(key);

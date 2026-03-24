@@ -241,19 +241,20 @@ func (s *Syncer) upsertRoutes(ctx context.Context, routes []models.Route) error 
 		}
 		batch := routes[i:end]
 
-		query := `INSERT INTO routes (route_id, route, bound, service_type, orig_en, dest_en, operator) VALUES `
-		args := make([]interface{}, 0, len(batch)*7)
+		query := `INSERT INTO routes (route_id, route, bound, service_type, orig_en, dest_en, dest_tc, dest_sc, operator, gmb_numeric_id) VALUES `
+		args := make([]interface{}, 0, len(batch)*10)
 		for j, r := range batch {
-			p := j * 7
+			p := j * 10
 			if j > 0 {
 				query += ", "
 			}
-			query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)", p+1, p+2, p+3, p+4, p+5, p+6, p+7)
-			args = append(args, r.RouteID, r.Route, r.Bound, r.ServiceType, r.OrigEn, r.DestEn, r.Operator)
+			query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)", p+1, p+2, p+3, p+4, p+5, p+6, p+7, p+8, p+9, p+10)
+			args = append(args, r.RouteID, r.Route, r.Bound, r.ServiceType, r.OrigEn, r.DestEn, r.DestTc, r.DestSc, r.Operator, r.GmbNumericID)
 		}
 		query += ` ON CONFLICT (route_id) DO UPDATE SET
 			route = EXCLUDED.route, bound = EXCLUDED.bound, service_type = EXCLUDED.service_type,
-			orig_en = EXCLUDED.orig_en, dest_en = EXCLUDED.dest_en, operator = EXCLUDED.operator`
+			orig_en = EXCLUDED.orig_en, dest_en = EXCLUDED.dest_en, dest_tc = EXCLUDED.dest_tc,
+			dest_sc = EXCLUDED.dest_sc, operator = EXCLUDED.operator, gmb_numeric_id = EXCLUDED.gmb_numeric_id`
 
 		if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
 			return err

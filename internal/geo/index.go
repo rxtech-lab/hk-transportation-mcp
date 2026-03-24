@@ -157,6 +157,64 @@ func (idx *StopIndex) LoadFromDB() error {
 	return nil
 }
 
+// GetRoutesByName queries the routes table for all routes with the given route
+// number. If operator is non-empty, results are filtered by operator.
+func (idx *StopIndex) GetRoutesByName(routeName, operator string) ([]models.Route, error) {
+	var rows *sql.Rows
+	var err error
+	if operator != "" {
+		rows, err = idx.db.Query(
+			`SELECT route_id, route, bound, service_type, orig_en, dest_en, operator
+			 FROM routes WHERE route = $1 AND operator = $2`, routeName, operator)
+	} else {
+		rows, err = idx.db.Query(
+			`SELECT route_id, route, bound, service_type, orig_en, dest_en, operator
+			 FROM routes WHERE route = $1`, routeName)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query routes: %w", err)
+	}
+	defer rows.Close()
+
+	var result []models.Route
+	for rows.Next() {
+		var r models.Route
+		if err := rows.Scan(&r.RouteID, &r.Route, &r.Bound, &r.ServiceType, &r.OrigEn, &r.DestEn, &r.Operator); err != nil {
+			continue
+		}
+		result = append(result, r)
+	}
+	return result, nil
+}
+
+// SearchStopsByName searches bus stops by name using case-insensitive matching
+// on English, Traditional Chinese, and Simplified Chinese name fields.
+func (idx *StopIndex) SearchStopsByName(query string, limit int) ([]models.BusStop, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	pattern := "%" + query + "%"
+	rows, err := idx.db.Query(
+		`SELECT stop_id, name_en, name_tc, name_sc, lat, lon, operator
+		 FROM bus_stops
+		 WHERE name_en ILIKE $1 OR name_tc ILIKE $1 OR name_sc ILIKE $1
+		 LIMIT $2`, pattern, limit)
+	if err != nil {
+		return nil, fmt.Errorf("search stops: %w", err)
+	}
+	defer rows.Close()
+
+	var result []models.BusStop
+	for rows.Next() {
+		var s models.BusStop
+		if err := rows.Scan(&s.StopID, &s.NameEn, &s.NameTc, &s.NameSc, &s.Lat, &s.Lon, &s.Operator); err != nil {
+			continue
+		}
+		result = append(result, s)
+	}
+	return result, nil
+}
+
 func dedupe(ss []string) []string {
 	seen := make(map[string]struct{}, len(ss))
 	result := make([]string, 0, len(ss))

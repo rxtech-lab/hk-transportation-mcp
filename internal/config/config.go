@@ -9,6 +9,7 @@ type Config struct {
 	DatabaseURL    string
 	RedisURL       string
 	Port           string
+	BackendURL     string
 	OAuthServerURL string
 	OAuthIssuer    string
 	OAuthAudience  string
@@ -32,6 +33,7 @@ func Load() (*Config, error) {
 		DatabaseURL:    getEnv("DATABASE_URL", "postgres://localhost:5432/hk_transport?sslmode=disable"),
 		RedisURL:       getEnv("REDIS_URL", "localhost:6379"),
 		Port:           getEnv("PORT", "8080"),
+		BackendURL:     getEnv("BACKEND_URL", "http://localhost:8080"),
 		OAuthServerURL: getEnv("OAUTH_SERVER_URL", ""),
 		OAuthIssuer:    getEnv("OAUTH_ISSUER", ""),
 		OAuthAudience:  getEnv("OAUTH_AUDIENCE", ""),

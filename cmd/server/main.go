@@ -79,6 +79,11 @@ func main() {
 		}
 	}
 
+	// Load GMB route mappings from database so FetchETA doesn't need to call the API
+	if err := gmbClient.LoadRouteMappings(db); err != nil {
+		log.Printf("Warning: failed to load GMB route mappings: %v", err)
+	}
+
 	// Create services
 	nominatim := osm.NewNominatimClient(httpClient, redisCache)
 	overpass := osm.NewOverpassClient(httpClient, redisCache)
@@ -95,7 +100,7 @@ func main() {
 	)
 
 	// Register tools
-	tools.Register(mcpServer, nearbyService, routeService, searchService)
+	tools.Register(mcpServer, nearbyService, routeService, searchService, index, cfg.BackendURL)
 
 	// Create Streamable HTTP server
 	streamableServer := server.NewStreamableHTTPServer(mcpServer)
@@ -138,6 +143,7 @@ func main() {
 			Nearby: nearbyService,
 			Route:  routeService,
 			Search: searchService,
+			Index:  index,
 		}
 		aiClient := chat.NewAIClient(cfg.AIGatewayURL, cfg.AIGatewayAPIKey, cfg.AIModel, toolExecutor)
 		waSender := whatsapp.NewSender(cfg.WasenderBaseURL, cfg.WasenderAPIKey, redisConn.Client())
@@ -148,6 +154,7 @@ func main() {
 		log.Println("WhatsApp chatbot enabled")
 	}
 	mux.HandleFunc("/api/arrivals", api.ArrivalsHandler(nearbyService))
+	mux.HandleFunc("/api/arrivals/nearby", api.NearbyArrivalsGETHandler(nearbyService))
 	mux.HandleFunc("/api/route-stops", api.RouteStopsHandler(index))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

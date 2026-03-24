@@ -1,14 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useMemo } from "react";
 import { BACKEND_URL } from "@/lib/config";
-import type { DisplayArrivalsInput } from "@/lib/types";
+import type { DisplayArrivalsInput, StopData } from "@/lib/types";
 import { updateWidget } from "@/lib/widget";
 
 const REFRESH_INTERVAL = 30_000;
 
 async function fetchArrivals(
   stops: { id?: string; lat: number; lng: number }[],
-): Promise<DisplayArrivalsInput["stops"]> {
+): Promise<StopData[]> {
   const res = await fetch(`${BACKEND_URL}/api/arrivals`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -19,12 +19,25 @@ async function fetchArrivals(
   return data.stops ?? [];
 }
 
+async function fetchArrivalsFromURL(url: string): Promise<StopData[]> {
+  // Rewrite the host to BACKEND_URL so it works in the mobile environment
+  const parsed = new URL(url);
+  const backend = new URL(BACKEND_URL);
+  parsed.protocol = backend.protocol;
+  parsed.host = backend.host;
+  const res = await fetch(parsed.toString());
+  if (!res.ok) throw new Error("Failed to fetch arrivals from URL");
+  const data = await res.json();
+  return data.stops ?? [];
+}
+
 export function useArrivalsRefresh(
   arrivalsData: DisplayArrivalsInput | null,
   setArrivalsData: (data: DisplayArrivalsInput | null) => void,
 ) {
   const stops = arrivalsData?.stops;
   const hasStops = !!stops?.length;
+  const refreshURL = arrivalsData?.url;
 
   const queryStops = useMemo(
     () =>
@@ -45,6 +58,13 @@ export function useArrivalsRefresh(
 
   const queryStopsRef = useRef(queryStops);
   queryStopsRef.current = queryStops;
+  const refreshURLRef = useRef(refreshURL);
+  refreshURLRef.current = refreshURL;
+
+  const enabled = hasStops || !!refreshURL;
+  const queryKey = refreshURL
+    ? ["arrivals-url", refreshURL]
+    : ["arrivals", queryKeyStops];
 
   const {
     data: freshStops,
@@ -52,15 +72,32 @@ export function useArrivalsRefresh(
     refetch,
     isFetching,
   } = useQuery({
-    queryKey: ["arrivals", queryKeyStops],
-    queryFn: () => fetchArrivals(queryStopsRef.current),
-    enabled: hasStops,
+    queryKey,
+    queryFn: () =>
+      refreshURLRef.current
+        ? fetchArrivalsFromURL(refreshURLRef.current)
+        : fetchArrivals(queryStopsRef.current),
+    enabled,
     refetchInterval: REFRESH_INTERVAL,
     refetchIntervalInBackground: false,
   });
 
   useEffect(() => {
-    if (!freshStops?.length || !arrivalsData?.stops?.length) return;
+    if (!freshStops?.length || !arrivalsData) return;
+
+    if (refreshURLRef.current) {
+      // URL-based: replace stops entirely with fresh data
+      const updated: DisplayArrivalsInput = {
+        ...arrivalsData,
+        stops: freshStops,
+      };
+      setArrivalsData(updated);
+      updateWidget(updated);
+      return;
+    }
+
+    // Legacy: merge fresh ETAs into existing stops
+    if (!arrivalsData.stops?.length) return;
 
     const freshMap = new Map<string, (typeof freshStops)[0]>();
     for (const s of freshStops) {

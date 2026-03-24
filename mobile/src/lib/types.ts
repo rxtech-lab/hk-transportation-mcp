@@ -1,6 +1,7 @@
 export interface DisplayArrivalsInput {
   title?: string;
-  stops: StopData[];
+  url?: string;
+  stops?: StopData[];
 }
 
 export interface StopData {

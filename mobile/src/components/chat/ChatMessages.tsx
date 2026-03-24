@@ -1,10 +1,11 @@
-import { use, useEffect, useRef, useMemo, useCallback } from "react";
+import { use, useContext, useEffect, useRef, useMemo, useCallback } from "react";
 import { FlatList, StyleSheet, View, Animated, Easing, Keyboard, Platform, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 import { isToolUIPart, type UIMessage } from "ai";
 import { useRouter, useSegments } from "expo-router";
 import { MessageBubble } from "./MessageBubble";
 import { AssistantMessage, type ToolCallInfo } from "./AssistantMessage";
 import { ToolCallSheetContext } from "@/app/(transport)/_ctx";
+import { ChatStreamContext } from "@/contexts/ChatStreamContext";
 import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
 
 interface ChatMessagesProps {
@@ -105,6 +106,7 @@ export function ChatMessagesList({
   const segments = useSegments();
   const routePrefix = segments[0] === "history" ? "/history" : "/(transport)";
   const { setToolCallData } = use(ToolCallSheetContext);
+  const { fetchedArrivals } = useContext(ChatStreamContext);
 
   const handleToolPress = useCallback((info: ToolCallInfo) => {
     setToolCallData(info);
@@ -257,6 +259,7 @@ export function ChatMessagesList({
           toolPartsToRender={item.toolPartsToRender!}
           lastArrivalsToolCallId={item.lastArrivalsToolCallId ?? null}
           arrivalsData={arrivalsData}
+          fetchedArrivals={fetchedArrivals.current}
           onLocationClick={onLocationClick}
           lastRefreshedAt={lastRefreshedAt}
           onRefresh={onRefresh}

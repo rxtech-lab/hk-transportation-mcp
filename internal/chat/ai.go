@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rxtech-lab/hk-transportation-mcp/internal/geo"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/service"
 )
 
@@ -37,6 +38,8 @@ If a user asks about anything unrelated to Hong Kong buses, politely decline and
 
 When users ask about bus arrivals, nearby buses, or real-time bus information without providing a location, ask them to share their location using WhatsApp's built-in location feature. Instruct them: tap the attachment (paperclip) icon in the chat, select "Location", then choose "Send Your Current Location". Once they share their location, use it to find nearby buses.
 When users ask about going from A to B, use search_location to resolve names, then route_arrivals to find direct routes.
+Use search_route to look up a specific bus route by number (e.g. "tell me about route 960").
+Use search_stops to find bus stops by name or location (e.g. "find stops near Central" or "where is the stop called Mong Kok").
 Use send_message to immediately acknowledge the user before looking up bus information (e.g. "Let me check that for you...").
 Respond concisely — WhatsApp messages should be short and readable.
 Use plain text, no markdown formatting.`, now.Format("2006-01-02 15:04 MST"))
@@ -50,6 +53,7 @@ type ToolExecutor struct {
 	Nearby *service.NearbyArrivalsService
 	Route  *service.RouteArrivalsService
 	Search *service.SearchLocationService
+	Index  *geo.StopIndex
 }
 
 // AIClient calls the Vercel AI Gateway (OpenAI-compatible).
@@ -281,6 +285,113 @@ func (c *AIClient) executeTool(ctx context.Context, name, argsJSON string) (stri
 		data, _ := json.Marshal(result)
 		return string(data), nil
 
+	case "search_route":
+		routeNumber, _ := args["route_number"].(string)
+		operator, _ := args["operator"].(string)
+		if routeNumber == "" {
+			return "", fmt.Errorf("search_route: route_number is required")
+		}
+		routes, err := c.executor.Index.GetRoutesByName(routeNumber, operator)
+		if err != nil {
+			return "", err
+		}
+		type stopDetail struct {
+			StopID string  `json:"stop_id"`
+			NameEn string  `json:"name_en"`
+			NameTc string  `json:"name_tc"`
+			Lat    float64 `json:"lat"`
+			Lon    float64 `json:"lon"`
+			Seq    int     `json:"seq"`
+		}
+		type routeDetail struct {
+			RouteID  string       `json:"route_id"`
+			Route    string       `json:"route"`
+			Bound    string       `json:"bound"`
+			OrigEn   string       `json:"orig_en"`
+			DestEn   string       `json:"dest_en"`
+			Operator string       `json:"operator"`
+			Stops    []stopDetail `json:"stops"`
+		}
+		var results []routeDetail
+		for _, r := range routes {
+			rd := routeDetail{
+				RouteID:  r.RouteID,
+				Route:    r.Route,
+				Bound:    r.Bound,
+				OrigEn:   r.OrigEn,
+				DestEn:   r.DestEn,
+				Operator: r.Operator,
+			}
+			for _, rs := range c.executor.Index.StopsForRoute(r.RouteID) {
+				if stop, ok := c.executor.Index.GetStop(rs.StopID); ok {
+					rd.Stops = append(rd.Stops, stopDetail{
+						StopID: stop.StopID,
+						NameEn: stop.NameEn,
+						NameTc: stop.NameTc,
+						Lat:    stop.Lat,
+						Lon:    stop.Lon,
+						Seq:    rs.StopSeq,
+					})
+				}
+			}
+			results = append(results, rd)
+		}
+		data, _ := json.Marshal(map[string]interface{}{"routes": results})
+		return string(data), nil
+
+	case "search_stops":
+		query, _ := args["query"].(string)
+		lat, _ := args["latitude"].(float64)
+		lon, _ := args["longitude"].(float64)
+		radius := 300.0
+		if r, ok := args["radius"].(float64); ok {
+			radius = r
+		}
+		type stopWithRoutes struct {
+			StopID   string   `json:"stop_id"`
+			NameEn   string   `json:"name_en"`
+			NameTc   string   `json:"name_tc"`
+			Lat      float64  `json:"lat"`
+			Lon      float64  `json:"lon"`
+			Operator string   `json:"operator"`
+			RouteIDs []string `json:"route_ids"`
+		}
+		var stops []stopWithRoutes
+		if lat != 0 || lon != 0 {
+			nearby := c.executor.Index.FindNearby(lat, lon, radius)
+			for _, s := range nearby {
+				stops = append(stops, stopWithRoutes{
+					StopID:   s.StopID,
+					NameEn:   s.NameEn,
+					NameTc:   s.NameTc,
+					Lat:      s.Lat,
+					Lon:      s.Lon,
+					Operator: s.Operator,
+					RouteIDs: c.executor.Index.RoutesForStop(s.StopID),
+				})
+			}
+		} else if query != "" {
+			found, err := c.executor.Index.SearchStopsByName(query, 20)
+			if err != nil {
+				return "", err
+			}
+			for _, s := range found {
+				stops = append(stops, stopWithRoutes{
+					StopID:   s.StopID,
+					NameEn:   s.NameEn,
+					NameTc:   s.NameTc,
+					Lat:      s.Lat,
+					Lon:      s.Lon,
+					Operator: s.Operator,
+					RouteIDs: c.executor.Index.RoutesForStop(s.StopID),
+				})
+			}
+		} else {
+			return "", fmt.Errorf("search_stops: either query or latitude+longitude is required")
+		}
+		data, _ := json.Marshal(map[string]interface{}{"stops": stops})
+		return string(data), nil
+
 	case "send_message":
 		text, _ := args["message"].(string)
 		if text == "" {
@@ -391,6 +502,37 @@ func buildToolDefs() []toolDef {
 						"limit": map[string]interface{}{"type": "number", "description": "Max results (default: 5)"},
 					},
 					"required": []string{"query"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: toolFuncDef{
+				Name:        "search_route",
+				Description: "Search for a bus route by number. Returns route details with origin, destination, operator, and ordered stop list.",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"route_number": map[string]interface{}{"type": "string", "description": "Bus route number (e.g., '1A', '960', 'N969')"},
+						"operator":     map[string]interface{}{"type": "string", "description": "Filter by operator: 'KMB', 'CTB', 'GMB'"},
+					},
+					"required": []string{"route_number"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: toolFuncDef{
+				Name:        "search_stops",
+				Description: "Search for bus stops by name or location. Returns stop details with serving route IDs.",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"query":     map[string]interface{}{"type": "string", "description": "Stop name to search for (English, Traditional Chinese, or Simplified Chinese)"},
+						"latitude":  map[string]interface{}{"type": "number", "description": "Latitude for location-based search (WGS84)"},
+						"longitude": map[string]interface{}{"type": "number", "description": "Longitude for location-based search (WGS84)"},
+						"radius":    map[string]interface{}{"type": "number", "description": "Search radius in meters (default: 300)"},
+					},
 				},
 			},
 		},

@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet, AppState } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import Constants from "expo-constants";
 import { Linking, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useI18n, locales } from "@/lib/i18n/i18n-provider";
@@ -32,6 +33,13 @@ export default function SettingsScreen() {
   }, [checkLocationStatus]);
 
   const currentLabel = locales.find((l) => l.code === locale)?.label ?? locale;
+
+  const appVersion = Constants.expoConfig?.version ?? "1.0.0";
+  const buildNumber =
+    Platform.OS === "ios"
+      ? Constants.expoConfig?.ios?.buildNumber
+      : Constants.expoConfig?.android?.versionCode?.toString();
+  const versionDisplay = buildNumber ? `${appVersion} (${buildNumber})` : appVersion;
 
   const locationLabel =
     locationStatus === "granted"
@@ -81,6 +89,46 @@ export default function SettingsScreen() {
             )}
           </View>
         </Pressable>
+      </View>
+
+      <View style={[styles.section, { backgroundColor: theme.backgroundSecondary, marginTop: 24 }]}>
+        <Pressable
+          onPress={() => router.push({ pathname: "/settings/legal", params: { type: "privacy" } })}
+          style={[styles.row, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.separator }]}
+        >
+          <View style={styles.rowLeft}>
+            <Ionicons name="shield-checkmark" size={20} color={theme.textTertiary} />
+            <Text style={[styles.rowLabel, { color: theme.text }]}>{dict.settings.privacyPolicy}</Text>
+          </View>
+          <View style={styles.rowRight}>
+            <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+          </View>
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.push({ pathname: "/settings/legal", params: { type: "terms" } })}
+          style={styles.row}
+        >
+          <View style={styles.rowLeft}>
+            <Ionicons name="document-text" size={20} color={theme.textTertiary} />
+            <Text style={[styles.rowLabel, { color: theme.text }]}>{dict.settings.termsConditions}</Text>
+          </View>
+          <View style={styles.rowRight}>
+            <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+          </View>
+        </Pressable>
+      </View>
+
+      <View style={[styles.section, { backgroundColor: theme.backgroundSecondary, marginTop: 24 }]}>
+        <View style={styles.row}>
+          <View style={styles.rowLeft}>
+            <Ionicons name="information-circle" size={20} color={theme.textTertiary} />
+            <Text style={[styles.rowLabel, { color: theme.text }]}>{dict.settings.version}</Text>
+          </View>
+          <View style={styles.rowRight}>
+            <Text style={[styles.rowValue, { color: theme.textTertiary }]}>{versionDisplay}</Text>
+          </View>
+        </View>
       </View>
     </View>
   );

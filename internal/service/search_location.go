@@ -6,7 +6,6 @@ import (
 	"log"
 
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/geo"
-	"github.com/rxtech-lab/hk-transportation-mcp/internal/models"
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/osm"
 )
 
@@ -33,11 +32,11 @@ type SearchLocationResult struct {
 
 // LocationWithStops combines a geocoded location with nearby bus stops.
 type LocationWithStops struct {
-	Name       string           `json:"name"`
-	Lat        float64          `json:"lat"`
-	Lon        float64          `json:"lon"`
-	Type       string           `json:"type,omitempty"`
-	NearbyStops []models.BusStop `json:"nearby_stops"`
+	Name        string           `json:"name"`
+	Lat         float64          `json:"lat"`
+	Lon         float64          `json:"lon"`
+	Type        string           `json:"type,omitempty"`
+	NearbyStops []geo.GroupedStop `json:"nearby_stops"`
 }
 
 // Execute searches for a location and finds nearby bus stops.
@@ -87,7 +86,7 @@ func (s *SearchLocationService) Execute(ctx context.Context, query string, limit
 			Lat:         r.Lat,
 			Lon:         r.Lon,
 			Type:        r.Type,
-			NearbyStops: nearbyStops,
+			NearbyStops: geo.GroupStopsByProximity(nearbyStops),
 		})
 	}
 

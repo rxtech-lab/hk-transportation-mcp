@@ -17,6 +17,7 @@
   "dependencies": {
     "@ai-sdk/react": "^3.0.118",
     "@bacons/apple-targets": "^4.0.6",
+    "@expo/ui": "~55.0.5",
     "@gorhom/bottom-sheet": "^5.2.8",
     "@lodev09/react-native-true-sheet": "^3.9.9",
     "@react-native-async-storage/async-storage": "2.2.0",

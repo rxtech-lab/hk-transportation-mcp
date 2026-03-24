@@ -36,6 +36,9 @@ export interface Dictionary {
     readonly locationOn: string;
     readonly locationOff: string;
     readonly locationNotSet: string;
+    readonly privacyPolicy: string;
+    readonly termsConditions: string;
+    readonly version: string;
   };
   map: {
     readonly title: string;
