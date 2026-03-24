@@ -126,6 +126,7 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (toolCall.toolName === "display_arrivals") {
         const input = toolCall.input as DisplayArrivalsInput;
+        console.log("[display_arrivals] input:", JSON.stringify({ url: input.url, stopsLength: input.stops?.length, title: input.title }));
         // Always send tool output immediately so the AI stream doesn't stall
         addToolOutput({
           tool: "display_arrivals" as never,
@@ -143,8 +144,8 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
               setFetchedArrivalsVersion((v) => v + 1);
               updateWidget(data);
             })
-            .catch(() => {
-              // Fetch failed; card will show loading state
+            .catch((err) => {
+              console.error("[fetchArrivalsFromURL] failed:", err, "url:", input.url);
             });
         } else {
           // Legacy flow: stops data passed directly
