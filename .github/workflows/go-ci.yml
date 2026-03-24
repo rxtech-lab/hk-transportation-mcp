@@ -5,6 +5,16 @@ on: push
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
@@ -16,5 +26,22 @@ jobs:
         run: go build ./cmd/server
       - name: Build sync
         run: go build ./cmd/sync
+      - name: Start server for e2e
+        run: |
+          go build -o server ./cmd/server
+          ./server &
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:3000/api/arrivals -X POST -H 'Content-Type: application/json' -d '{"stops":[{"lat":22.28,"lng":114.18}]}' > /dev/null 2>&1; then
+              echo "Server ready"
+              break
+            fi
+            echo "Waiting for server... ($i)"
+            sleep 2
+          done
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: localhost:6379
+          PORT: "3000"
+          CACHE_ENABLED: "true"
       - name: Test
-        run: go test ./...
+        run: go test -v -count=1 ./...

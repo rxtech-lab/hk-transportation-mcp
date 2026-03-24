@@ -27,7 +27,7 @@ private struct LiveActivityBannerView: View {
         .padding(.vertical, 6)
         .background(
           RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(Color.blue)
+            .fill(operatorColor(context.attributes.operatorCode))
         )
 
         // Destination
@@ -176,7 +176,7 @@ struct WidgetLiveActivity: Widget {
           HStack(spacing: 6) {
             Image(systemName: "bus.fill")
               .font(.system(size: 13, weight: .semibold))
-              .foregroundColor(.blue)
+              .foregroundColor(operatorColor(context.attributes.operatorCode))
             Text(context.attributes.route)
               .font(.system(size: 20, weight: .bold, design: .rounded))
               .foregroundColor(.white)
@@ -251,7 +251,7 @@ struct WidgetLiveActivity: Widget {
         HStack(spacing: 4) {
           Image(systemName: "bus.fill")
             .font(.system(size: 10))
-            .foregroundColor(.blue)
+            .foregroundColor(operatorColor(context.attributes.operatorCode))
           Text(context.attributes.route)
             .font(.system(size: 13, weight: .bold, design: .rounded))
             .foregroundColor(.white)
@@ -265,7 +265,7 @@ struct WidgetLiveActivity: Widget {
       } minimal: {
         Image(systemName: "bus.fill")
           .font(.system(size: 11, weight: .semibold))
-          .foregroundColor(.blue)
+          .foregroundColor(operatorColor(context.attributes.operatorCode))
       }
     }
   }

@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"log"
+	"math"
 	"net/http"
 
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/geo"
@@ -20,9 +21,10 @@ type routeStopInfo struct {
 }
 
 type routeStopsResponse struct {
-	Route       string          `json:"route"`
-	Destination string          `json:"destination"`
-	Stops       []routeStopInfo `json:"stops"`
+	Route          string          `json:"route"`
+	Destination    string          `json:"destination"`
+	Stops          []routeStopInfo `json:"stops"`
+	MatchedStopID  string          `json:"matched_stop_id,omitempty"`
 }
 
 // RouteStopsHandler returns all stops for a route that passes through a given stop.
@@ -52,7 +54,9 @@ func RouteStopsHandler(index *geo.StopIndex) http.HandlerFunc {
 
 		// Find all routeIDs that serve this stop
 		routeIDs := index.RoutesForStop(stopID)
+		log.Printf("[/api/route-stops] RoutesForStop(%s) returned %d routes: %v", stopID, len(routeIDs), routeIDs)
 		if len(routeIDs) == 0 {
+			log.Printf("[/api/route-stops] no routes found for stop %s, returning empty", stopID)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(routeStopsResponse{Route: routeName, Stops: []routeStopInfo{}})
 			return
@@ -61,19 +65,55 @@ func RouteStopsHandler(index *geo.StopIndex) http.HandlerFunc {
 		// Find the routeID matching the route name
 		var matchedRouteID string
 		for _, rid := range routeIDs {
-			if extractRouteNameFromID(rid) == routeName {
+			extracted := extractRouteNameFromID(rid)
+			log.Printf("[/api/route-stops] routeID=%s extracted=%s want=%s", rid, extracted, routeName)
+			if extracted == routeName {
 				matchedRouteID = rid
 				break
 			}
 		}
 		if matchedRouteID == "" {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(routeStopsResponse{Route: routeName, Stops: []routeStopInfo{}})
-			return
+			log.Printf("[/api/route-stops] no routeID matched route name %q among %v, falling back to DB lookup", routeName, routeIDs)
+			// Fallback: the stop may be grouped with a nearby stop from a different operator.
+			// Look up the route directly by name in the DB.
+			// Pick the route whose stops are closest to the query stop.
+			queryStop, hasQueryStop := index.GetStop(stopID)
+			dbRoutes, err := index.GetRoutesByName(routeName, "")
+			if err == nil && len(dbRoutes) > 0 {
+				bestDist := math.MaxFloat64
+				for _, r := range dbRoutes {
+					log.Printf("[/api/route-stops] DB fallback candidate routeID=%s", r.RouteID)
+					if !hasQueryStop {
+						// No location info, just pick the first
+						matchedRouteID = r.RouteID
+						break
+					}
+					// Find min distance from any stop on this route to the query stop
+					rStops := index.StopsForRoute(r.RouteID)
+					for _, rs := range rStops {
+						s, ok := index.GetStop(rs.StopID)
+						if !ok {
+							continue
+						}
+						d := haversine(queryStop.Lat, queryStop.Lon, s.Lat, s.Lon)
+						if d < bestDist {
+							bestDist = d
+							matchedRouteID = r.RouteID
+						}
+					}
+				}
+				log.Printf("[/api/route-stops] DB fallback selected routeID=%s (dist=%.0fm)", matchedRouteID, bestDist)
+			}
+			if matchedRouteID == "" {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(routeStopsResponse{Route: routeName, Stops: []routeStopInfo{}})
+				return
+			}
 		}
 
 		// Get all stops for this route in order
 		routeStops := index.StopsForRoute(matchedRouteID)
+		log.Printf("[/api/route-stops] StopsForRoute(%s) returned %d stops", matchedRouteID, len(routeStops))
 		stops := make([]routeStopInfo, 0, len(routeStops))
 		dest := ""
 		for _, rs := range routeStops {
@@ -95,34 +135,76 @@ func RouteStopsHandler(index *geo.StopIndex) http.HandlerFunc {
 			dest = stop.NameEn
 		}
 
-		log.Printf("[/api/route-stops] route=%s matched=%s stops=%d", routeName, matchedRouteID, len(stops))
+		// Find the matched stop: exact ID match first, then closest by distance
+		matchedStopID := stopID
+		hasExactMatch := false
+		for _, s := range stops {
+			if s.StopID == stopID {
+				hasExactMatch = true
+				break
+			}
+		}
+		if !hasExactMatch {
+			queryStop, ok := index.GetStop(stopID)
+			if ok && len(stops) > 0 {
+				bestDist := math.MaxFloat64
+				for _, s := range stops {
+					d := haversine(queryStop.Lat, queryStop.Lon, s.Lat, s.Lng)
+					if d < bestDist {
+						bestDist = d
+						matchedStopID = s.StopID
+					}
+				}
+				log.Printf("[/api/route-stops] no exact stop match for %s, closest=%s (%.0fm)", stopID, matchedStopID, bestDist)
+			}
+		}
+
+		log.Printf("[/api/route-stops] route=%s matched=%s stops=%d matchedStop=%s", routeName, matchedRouteID, len(stops), matchedStopID)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(routeStopsResponse{
-			Route:       routeName,
-			Destination: dest,
-			Stops:       stops,
+			Route:         routeName,
+			Destination:   dest,
+			Stops:         stops,
+			MatchedStopID: matchedStopID,
 		})
 	}
 }
 
-// extractRouteNameFromID extracts route name from ID like "KMB-1A-O-1" → "1A"
+// extractRouteNameFromID extracts route name from route ID.
+// KMB/CTB format: "KMB-1A-O-1" → "1A" (4 parts, route is parts[1])
+// GMB format:     "GMB-NT-4B-O-1" → "4B" (5 parts, route is parts[2])
 func extractRouteNameFromID(routeID string) string {
-	start := 0
-	count := 0
-	for i, c := range routeID {
-		if c == '-' {
-			count++
-			if count == 1 {
-				start = i + 1
-			}
-			if count == 2 {
-				return routeID[start:i]
-			}
-		}
+	parts := splitRouteParts(routeID)
+	if len(parts) >= 5 && parts[0] == "GMB" {
+		return parts[2]
 	}
-	if count == 1 {
-		return routeID[start:]
+	if len(parts) >= 2 {
+		return parts[1]
 	}
 	return routeID
+}
+
+// haversine returns the distance in metres between two lat/lng points.
+func haversine(lat1, lon1, lat2, lon2 float64) float64 {
+	const R = 6371000 // Earth radius in metres
+	dLat := (lat2 - lat1) * math.Pi / 180
+	dLon := (lon2 - lon1) * math.Pi / 180
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*math.Pi/180)*math.Cos(lat2*math.Pi/180)*
+			math.Sin(dLon/2)*math.Sin(dLon/2)
+	return R * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+}
+
+func splitRouteParts(id string) []string {
+	var parts []string
+	start := 0
+	for i, c := range id {
+		if c == '-' {
+			parts = append(parts, id[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, id[start:])
+	return parts
 }

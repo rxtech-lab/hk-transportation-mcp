@@ -36,6 +36,7 @@ export async function startTracking(params: {
   stopName: string;
   stopId: string;
   destination: string;
+  operator?: string;
   etas: { minutes: number; remarks?: string }[];
 }): Promise<boolean> {
   if (Platform.OS !== "ios") return false;
@@ -47,6 +48,7 @@ export async function startTracking(params: {
       stopName: params.stopName,
       stopId: params.stopId,
       destination: params.destination,
+      operatorCode: params.operator ?? "",
       etas: params.etas.map((e) => ({
         minutes: e.minutes,
         remarks: e.remarks ?? "",

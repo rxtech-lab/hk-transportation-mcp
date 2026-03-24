@@ -24,6 +24,17 @@ import * as Haptics from "expo-haptics";
 import type { ArrivalData, StopData } from "@/lib/types";
 import { getRouteTrackingCounts } from "@/lib/db";
 
+function operatorBadgeColor(operator?: string): string {
+  switch (operator) {
+    case "GMB":
+      return "#34C759";
+    case "KMB":
+      return "#CC0000";
+    default:
+      return "#007AFF";
+  }
+}
+
 interface Section {
   stopId: string;
   stopName: string;
@@ -94,7 +105,15 @@ export default function NearbyScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setTrackingCounts(getRouteTrackingCounts());
+      const next = getRouteTrackingCounts();
+      setTrackingCounts((prev) => {
+        // Only update if counts actually changed to avoid unnecessary re-render
+        if (prev.size !== next.size) return next;
+        for (const [k, v] of next) {
+          if (prev.get(k) !== v) return next;
+        }
+        return prev;
+      });
     }, []),
   );
 
@@ -109,13 +128,14 @@ export default function NearbyScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [lastRefreshedAt]);
 
-  const sections = buildSections(stops, getStopName, trackingCounts);
-
-  useFocusEffect(
-    useCallback(() => {
-      geo.request().then(() => setLocationRequested(true));
-    }, []), // eslint-disable-line react-hooks/exhaustive-deps
+  const sections = useMemo(
+    () => buildSections(stops, getStopName, trackingCounts),
+    [stops, getStopName, trackingCounts],
   );
+
+  useEffect(() => {
+    geo.request().then(() => setLocationRequested(true));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const renderItem = useCallback(
     ({ item, section }: { item: ArrivalData; section: Section }) => {
@@ -134,6 +154,7 @@ export default function NearbyScreen() {
                 route: item.route,
                 stopId: section.stopId,
                 destination: dest,
+                operator: item.operator ?? "",
               },
             })
           }
@@ -145,7 +166,11 @@ export default function NearbyScreen() {
         >
           <View style={styles.routeCol}>
             <View
-              style={[styles.routeBadge, isTracked && styles.routeBadgeTracked]}
+              style={[
+                styles.routeBadge,
+                { backgroundColor: operatorBadgeColor(item.operator) },
+                isTracked && styles.routeBadgeTracked,
+              ]}
             >
               <Ionicons name="bus" size={10} color="#fff" />
               <Text style={styles.routeNumber}>{item.route}</Text>
@@ -208,8 +233,8 @@ export default function NearbyScreen() {
     [theme, router],
   );
 
-  // Loading state
-  if (geo.loading || (!locationRequested && !geo.latitude)) {
+  // Loading state — only show if we don't have location yet
+  if (!geo.latitude && (geo.loading || !locationRequested)) {
     return (
       <View style={[styles.center, { paddingTop: insets.top + 44 }]}>
         <ActivityIndicator size="large" color="#007AFF" />

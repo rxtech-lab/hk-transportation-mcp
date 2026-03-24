@@ -59,6 +59,7 @@ struct ArrivalsResponse: Decodable {
         let destination: String
         let dest_tc: String?
         let dest_sc: String?
+        let `operator`: String?
         let etas: [APIEta]?
 
         /// Returns the localized destination based on system locale.
@@ -97,6 +98,7 @@ struct WidgetStop {
 struct WidgetArrival {
     let route: String
     let destination: String
+    let operatorCode: String
     let etas: [WidgetEta]
 }
 
@@ -117,6 +119,7 @@ struct TransitAttributes: ActivityAttributes {
     var stopName: String
     var stopId: String
     var destination: String
+    var operatorCode: String
 }
 
 struct LiveEta: Codable, Hashable {

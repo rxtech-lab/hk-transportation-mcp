@@ -16,6 +16,7 @@ interface RouteStopsResponse {
   route: string;
   destination: string;
   stops: RouteStopInfo[];
+  matched_stop_id?: string;
 }
 
 async function fetchRouteStops(
@@ -43,6 +44,7 @@ export function useRouteStops(route: string | null, stopId: string | null) {
     route: data?.route ?? route ?? "",
     destination: data?.destination ?? "",
     stops: data?.stops ?? [],
+    matchedStopId: data?.matched_stop_id ?? stopId ?? undefined,
     isLoading,
   };
 }

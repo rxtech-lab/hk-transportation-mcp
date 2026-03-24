@@ -89,25 +89,101 @@ func (idx *StopIndex) FindNearby(lat, lon float64, radiusM float64) []models.Bus
 }
 
 // RoutesForStop returns all route IDs that serve the given stop.
+// Falls back to a database query when the in-memory index has no entry.
 func (idx *StopIndex) RoutesForStop(stopID string) []string {
 	idx.mu.RLock()
-	defer idx.mu.RUnlock()
-	return idx.stopRoutes[stopID]
+	routes := idx.stopRoutes[stopID]
+	idx.mu.RUnlock()
+
+	if len(routes) > 0 {
+		return routes
+	}
+
+	// Fallback: query DB for route_stops not yet in memory
+	rows, err := idx.db.Query("SELECT route_id FROM route_stops WHERE stop_id = $1", stopID)
+	if err != nil {
+		log.Printf("RoutesForStop DB fallback for %s: %v", stopID, err)
+		return nil
+	}
+	defer rows.Close()
+
+	var dbRoutes []string
+	for rows.Next() {
+		var routeID string
+		if err := rows.Scan(&routeID); err == nil {
+			dbRoutes = append(dbRoutes, routeID)
+		}
+	}
+
+	if len(dbRoutes) > 0 {
+		// Cache in memory for subsequent calls
+		idx.mu.Lock()
+		idx.stopRoutes[stopID] = dbRoutes
+		idx.mu.Unlock()
+	}
+
+	return dbRoutes
 }
 
 // StopsForRoute returns the ordered stops for a given route.
+// Falls back to a database query when the in-memory index has no entry.
 func (idx *StopIndex) StopsForRoute(routeID string) []models.RouteStop {
 	idx.mu.RLock()
-	defer idx.mu.RUnlock()
-	return idx.routeStops[routeID]
+	rs := idx.routeStops[routeID]
+	idx.mu.RUnlock()
+
+	if len(rs) > 0 {
+		return rs
+	}
+
+	rows, err := idx.db.Query(
+		"SELECT route_id, stop_id, stop_seq, operator FROM route_stops WHERE route_id = $1 ORDER BY stop_seq", routeID)
+	if err != nil {
+		log.Printf("StopsForRoute DB fallback for %s: %v", routeID, err)
+		return nil
+	}
+	defer rows.Close()
+
+	var dbRS []models.RouteStop
+	for rows.Next() {
+		var r models.RouteStop
+		if err := rows.Scan(&r.RouteID, &r.StopID, &r.StopSeq, &r.Operator); err == nil {
+			dbRS = append(dbRS, r)
+		}
+	}
+
+	if len(dbRS) > 0 {
+		idx.mu.Lock()
+		idx.routeStops[routeID] = dbRS
+		idx.mu.Unlock()
+	}
+
+	return dbRS
 }
 
 // GetStop returns a stop by ID, or false if not found.
+// Falls back to a database query when the in-memory index has no entry.
 func (idx *StopIndex) GetStop(stopID string) (models.BusStop, bool) {
 	idx.mu.RLock()
-	defer idx.mu.RUnlock()
 	s, ok := idx.stopsByID[stopID]
-	return s, ok
+	idx.mu.RUnlock()
+
+	if ok {
+		return s, true
+	}
+
+	row := idx.db.QueryRow(
+		"SELECT stop_id, name_en, name_tc, name_sc, lat, lon, operator FROM bus_stops WHERE stop_id = $1", stopID)
+	var bs models.BusStop
+	if err := row.Scan(&bs.StopID, &bs.NameEn, &bs.NameTc, &bs.NameSc, &bs.Lat, &bs.Lon, &bs.Operator); err != nil {
+		return models.BusStop{}, false
+	}
+
+	idx.mu.Lock()
+	idx.stopsByID[stopID] = bs
+	idx.mu.Unlock()
+
+	return bs, true
 }
 
 // StopCount returns the total number of stops in the index.
@@ -242,9 +318,14 @@ func (idx *StopIndex) RouteIDsByName(routeName string) []string {
 	return ids
 }
 
-// extractRouteNameFromID extracts the route name from a route ID like "KMB-1A-O-1" → "1A".
+// extractRouteNameFromID extracts the route name from a route ID.
+// KMB/CTB format: "KMB-1A-O-1" → "1A" (4 parts, route is parts[1])
+// GMB format:     "GMB-NT-4B-O-1" → "4B" (5 parts, route is parts[2])
 func extractRouteNameFromID(routeID string) string {
 	parts := splitID(routeID)
+	if len(parts) >= 5 && parts[0] == "GMB" {
+		return parts[2]
+	}
 	if len(parts) >= 2 {
 		return parts[1]
 	}

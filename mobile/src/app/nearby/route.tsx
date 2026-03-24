@@ -122,11 +122,7 @@ function StopRow({
             {isLoading ? (
               <ActivityIndicator size="small" color="#007AFF" />
             ) : arrival && arrival.etas.length > 0 ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.etaRow}
-              >
+              <View style={styles.etaRow}>
                 {arrival.etas.map((eta, k) => (
                   <EtaPill
                     key={k}
@@ -134,7 +130,7 @@ function StopRow({
                     remarks={eta.remarks}
                   />
                 ))}
-              </ScrollView>
+              </View>
             ) : (
               <Text style={[styles.noEta, { color: theme.textSecondary }]}>
                 No arrivals
@@ -155,6 +151,7 @@ export default function RouteDetailScreen() {
     route: string;
     stopId: string;
     destination: string;
+    operator: string;
   }>();
 
   const router = useRouter();
@@ -182,6 +179,7 @@ export default function RouteDetailScreen() {
         stopName: params.stopId,
         stopId: params.stopId,
         destination: params.destination ?? "",
+        operator: params.operator ?? "",
         etas: [],
       });
       if (ok) {
@@ -203,10 +201,12 @@ export default function RouteDetailScreen() {
     }, 300);
   }, []);
 
-  const { stops, destination, isLoading } = useRouteStops(
+  const { stops, destination, matchedStopId, isLoading } = useRouteStops(
     params.route ?? null,
     params.stopId ?? null,
   );
+
+  const currentStopId = matchedStopId ?? params.stopId;
 
   // Use localized destination from last stop if available
   const localizedDestination = stops.length > 0
@@ -266,16 +266,16 @@ export default function RouteDetailScreen() {
           ) : (
             stops.map((item, index) => (
               <StopRow
-                key={item.id}
+                key={`${item.id}-${index}`}
                 stop={item}
                 route={params.route ?? ""}
                 isFirst={index === 0}
                 isLast={index === stops.length - 1}
-                isCurrent={item.id === params.stopId}
+                isCurrent={item.id === currentStopId}
                 theme={theme}
                 displayName={getStopName(item)}
                 onLayoutCurrent={
-                  item.id === params.stopId
+                  item.id === currentStopId
                     ? handleCurrentStopLayout
                     : undefined
                 }
@@ -378,6 +378,7 @@ const styles = StyleSheet.create({
   },
   etaRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 6,
   },
   noEta: {

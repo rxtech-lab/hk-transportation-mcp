@@ -20,6 +20,7 @@ export interface ArrivalData {
   destination: string;
   dest_tc: string;
   dest_sc: string;
+  operator?: string;
   etas: EtaData[];
 }
 

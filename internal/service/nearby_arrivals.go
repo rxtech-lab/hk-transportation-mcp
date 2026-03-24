@@ -54,6 +54,10 @@ type NearbyStopArrivals struct {
 // Execute finds nearby stops and fetches ETAs for all routes at each stop.
 func (s *NearbyArrivalsService) Execute(ctx context.Context, lat, lon, radiusM float64) (*NearbyArrivalsResult, error) {
 	nearbyStops := s.index.FindNearby(lat, lon, radiusM)
+	log.Printf("[nearby] found %d stops within %.0fm of (%.6f, %.6f)", len(nearbyStops), radiusM, lat, lon)
+	for _, st := range nearbyStops {
+		log.Printf("[nearby]   stop %s operator=%s name=%s", st.StopID, st.Operator, st.NameEn)
+	}
 	if len(nearbyStops) == 0 {
 		return &NearbyArrivalsResult{Stops: []NearbyStopArrivals{}}, nil
 	}
@@ -70,6 +74,7 @@ func (s *NearbyArrivalsService) Execute(ctx context.Context, lat, lon, radiusM f
 			defer wg.Done()
 
 			routeIDs := s.index.RoutesForStop(stop.StopID)
+			log.Printf("[nearby]   stop %s (%s) has %d route(s)", stop.StopID, stop.Operator, len(routeIDs))
 			if len(routeIDs) == 0 {
 				return
 			}
@@ -145,6 +150,8 @@ func (s *NearbyArrivalsService) Execute(ctx context.Context, lat, lon, radiusM f
 		return results[i].Distance < results[j].Distance
 	})
 
+	log.Printf("[nearby] %d stops had arrivals out of %d nearby", len(results), len(nearbyStops))
+
 	// Group nearby stops from different operators into a single entry
 	results = groupNearbyStops(results)
 
@@ -160,15 +167,18 @@ func (s *NearbyArrivalsService) fetchETACached(ctx context.Context, stop models.
 		cacheKey := fmt.Sprintf("eta:%s:%s:%s", client.Operator(), stop.StopID, route)
 		if s.cache != nil {
 			if cached, ok, err := cache.GetJSON[[]models.ETAArrival](ctx, s.cache, cacheKey); err == nil && ok {
+				log.Printf("[nearby]     ETA cache hit %s/%s/%s: %d arrivals", client.Operator(), stop.StopID, route, len(cached))
 				return cached
 			}
 		}
 
+		log.Printf("[nearby]     fetching ETA %s/%s/%s", client.Operator(), stop.StopID, route)
 		etas, err := client.FetchETA(ctx, stop.StopID, route)
 		if err != nil {
-			log.Printf("fetch ETA %s/%s/%s: %v", client.Operator(), stop.StopID, route, err)
+			log.Printf("[nearby]     ETA error %s/%s/%s: %v", client.Operator(), stop.StopID, route, err)
 			return nil
 		}
+		log.Printf("[nearby]     ETA result %s/%s/%s: %d arrivals", client.Operator(), stop.StopID, route, len(etas))
 
 		// Populate stop name
 		for i := range etas {
@@ -247,11 +257,42 @@ func (s *NearbyArrivalsService) ExecuteByStopID(ctx context.Context, stopID stri
 	}, nil
 }
 
-// extractRouteName extracts the route name from a route ID like "KMB-1A-O-1" → "1A"
+// FetchStopETA fetches ETAs for a specific stop, route and operator combination.
+func (s *NearbyArrivalsService) FetchStopETA(ctx context.Context, stopID, route, operator string) ([]models.ETAArrival, error) {
+	stop, ok := s.index.GetStop(stopID)
+	if !ok {
+		return nil, fmt.Errorf("stop %s not found", stopID)
+	}
+
+	if operator != "" && stop.Operator != operator {
+		return nil, fmt.Errorf("stop %s belongs to operator %s, not %s", stopID, stop.Operator, operator)
+	}
+
+	etas := s.fetchETACached(ctx, stop, route)
+	sort.Slice(etas, func(i, j int) bool {
+		if etas[i].ETA == nil {
+			return false
+		}
+		if etas[j].ETA == nil {
+			return true
+		}
+		return etas[i].ETA.Before(*etas[j].ETA)
+	})
+
+	return etas, nil
+}
+
+// extractRouteName extracts the route name from a route ID.
+// KMB/CTB format: "KMB-1A-O-1"       → "1A"
+// GMB format:     "GMB-NT-11-O-1"     → "11"  (extra region segment)
 func extractRouteName(routeID string) string {
-	// Format: OPERATOR-ROUTE-BOUND-SERVICETYPE
 	parts := splitRouteID(routeID)
+	if len(parts) >= 5 && parts[0] == "GMB" {
+		// GMB: OPERATOR-REGION-ROUTE-BOUND-SERVICETYPE
+		return parts[2]
+	}
 	if len(parts) >= 2 {
+		// KMB/CTB: OPERATOR-ROUTE-BOUND-SERVICETYPE
 		return parts[1]
 	}
 	return routeID
