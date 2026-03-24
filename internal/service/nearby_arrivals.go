@@ -16,6 +16,7 @@ import (
 
 const etaCacheTTL = 30 * time.Second
 
+
 // NearbyArrivalsService handles the nearby_arrivals tool logic.
 type NearbyArrivalsService struct {
 	index   *geo.StopIndex
@@ -46,6 +47,7 @@ type NearbyStopArrivals struct {
 	NameSc   string             `json:"name_sc"`
 	Lat      float64            `json:"lat"`
 	Lon      float64            `json:"lon"`
+	Distance float64            `json:"distance"` // distance in metres from query point
 	Arrivals []models.ETAArrival `json:"arrivals"`
 }
 
@@ -85,11 +87,24 @@ func (s *NearbyArrivalsService) Execute(ctx context.Context, lat, lon, radiusM f
 				}
 			}
 
-			var arrivals []models.ETAArrival
+			var (
+				innerWg  sync.WaitGroup
+				innerMu  sync.Mutex
+				arrivals []models.ETAArrival
+			)
 			for routeName := range routeNames {
-				etas := s.fetchETACached(ctx, stop, routeName)
-				arrivals = append(arrivals, etas...)
+				innerWg.Add(1)
+				go func(route string) {
+					defer innerWg.Done()
+					etas := s.fetchETACached(ctx, stop, route)
+					if len(etas) > 0 {
+						innerMu.Lock()
+						arrivals = append(arrivals, etas...)
+						innerMu.Unlock()
+					}
+				}(routeName)
 			}
+			innerWg.Wait()
 
 			// Sort by ETA time
 			sort.Slice(arrivals, func(i, j int) bool {
@@ -102,6 +117,11 @@ func (s *NearbyArrivalsService) Execute(ctx context.Context, lat, lon, radiusM f
 				return arrivals[i].ETA.Before(*arrivals[j].ETA)
 			})
 
+			// Skip stops with no arrivals
+			if len(arrivals) == 0 {
+				return
+			}
+
 			mu.Lock()
 			results = append(results, NearbyStopArrivals{
 				StopID:   stop.StopID,
@@ -111,6 +131,7 @@ func (s *NearbyArrivalsService) Execute(ctx context.Context, lat, lon, radiusM f
 				NameSc:   stop.NameSc,
 				Lat:      stop.Lat,
 				Lon:      stop.Lon,
+				Distance: geo.HaversineMetres(lat, lon, stop.Lat, stop.Lon),
 				Arrivals: arrivals,
 			})
 			mu.Unlock()
@@ -118,6 +139,14 @@ func (s *NearbyArrivalsService) Execute(ctx context.Context, lat, lon, radiusM f
 	}
 
 	wg.Wait()
+
+	// Sort stops by distance from query point
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Distance < results[j].Distance
+	})
+
+	// Group nearby stops from different operators into a single entry
+	results = groupNearbyStops(results)
 
 	return &NearbyArrivalsResult{Stops: results}, nil
 }
@@ -177,11 +206,24 @@ func (s *NearbyArrivalsService) ExecuteByStopID(ctx context.Context, stopID stri
 		}
 	}
 
-	var arrivals []models.ETAArrival
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		arrivals []models.ETAArrival
+	)
 	for routeName := range routeNames {
-		etas := s.fetchETACached(ctx, stop, routeName)
-		arrivals = append(arrivals, etas...)
+		wg.Add(1)
+		go func(route string) {
+			defer wg.Done()
+			etas := s.fetchETACached(ctx, stop, route)
+			if len(etas) > 0 {
+				mu.Lock()
+				arrivals = append(arrivals, etas...)
+				mu.Unlock()
+			}
+		}(routeName)
 	}
+	wg.Wait()
 
 	sort.Slice(arrivals, func(i, j int) bool {
 		if arrivals[i].ETA == nil {
@@ -213,6 +255,53 @@ func extractRouteName(routeID string) string {
 		return parts[1]
 	}
 	return routeID
+}
+
+
+// groupNearbyStops merges stops that are within geo.GroupDistanceM of each other
+// and from different operators into a single stop entry with combined arrivals.
+// The first (closest) stop in each group is used as the representative.
+func groupNearbyStops(stops []NearbyStopArrivals) []NearbyStopArrivals {
+	if len(stops) <= 1 {
+		return stops
+	}
+
+	merged := make([]bool, len(stops))
+	var result []NearbyStopArrivals
+
+	for i := 0; i < len(stops); i++ {
+		if merged[i] {
+			continue
+		}
+
+		group := stops[i]
+		for j := i + 1; j < len(stops); j++ {
+			if merged[j] {
+				continue
+			}
+			dist := geo.HaversineMetres(group.Lat, group.Lon, stops[j].Lat, stops[j].Lon)
+			if dist <= geo.GroupDistanceM {
+				// Merge arrivals from the nearby stop into the group
+				group.Arrivals = append(group.Arrivals, stops[j].Arrivals...)
+				merged[j] = true
+			}
+		}
+
+		// Re-sort merged arrivals by ETA
+		sort.Slice(group.Arrivals, func(a, b int) bool {
+			if group.Arrivals[a].ETA == nil {
+				return false
+			}
+			if group.Arrivals[b].ETA == nil {
+				return true
+			}
+			return group.Arrivals[a].ETA.Before(*group.Arrivals[b].ETA)
+		})
+
+		result = append(result, group)
+	}
+
+	return result
 }
 
 func splitRouteID(routeID string) []string {

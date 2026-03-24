@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/service"
@@ -43,6 +44,7 @@ type stopResponse struct {
 	NameSc   string            `json:"name_sc"`
 	Lat      float64           `json:"lat"`
 	Lng      float64           `json:"lng"`
+	Distance float64           `json:"distance"` // distance in metres from query point
 	Arrivals []arrivalResponse `json:"arrivals"`
 }
 
@@ -95,7 +97,7 @@ func ArrivalsHandler(nearbyService *service.NearbyArrivalsService) http.HandlerF
 		respStops := make([]stopResponse, 0)
 
 		// Determine search radius
-		radius := 50.0
+		radius := 150.0
 		if req.NearbyRadius > 0 {
 			radius = math.Min(req.NearbyRadius, 1000)
 		}
@@ -159,60 +161,7 @@ func ArrivalsHandler(nearbyService *service.NearbyArrivalsService) http.HandlerF
 				}
 			}
 
-			for _, matched := range matchedStops {
-				// Group arrivals by route
-				routeMap := make(map[string]*arrivalResponse)
-				var routeOrder []string
-				for _, a := range matched.Arrivals {
-					if routeFilter != nil {
-						if _, ok := routeFilter[a.Route]; !ok {
-							continue
-						}
-					}
-					existing, ok := routeMap[a.Route]
-					if !ok {
-						existing = &arrivalResponse{
-							Route:       a.Route,
-							Destination: a.Destination,
-							DestTc:      a.DestTc,
-							DestSc:      a.DestSc,
-						}
-						if existing.Destination == "" {
-							existing.Destination = a.Direction
-						}
-						routeMap[a.Route] = existing
-						routeOrder = append(routeOrder, a.Route)
-					}
-					minutes := 0
-					if a.ETA != nil {
-						minutes = int(math.Max(0, math.Round(a.ETA.Sub(now).Minutes())))
-					}
-					existing.Etas = append(existing.Etas, etaResponse{
-						Minutes: minutes,
-						Remarks: a.Remark,
-					})
-				}
-
-				arrivals := make([]arrivalResponse, 0, len(routeOrder))
-				for _, route := range routeOrder {
-					resp := *routeMap[route]
-					if resp.Etas == nil {
-						resp.Etas = []etaResponse{}
-					}
-					arrivals = append(arrivals, resp)
-				}
-
-				respStops = append(respStops, stopResponse{
-					ID:       matched.StopID,
-					Name:     matched.StopName,
-					NameEn:   matched.NameEn,
-					NameTc:   matched.NameTc,
-					NameSc:   matched.NameSc,
-					Lat:      matched.Lat,
-					Lng:      matched.Lon,
-					Arrivals: arrivals,
-				})
-			}
+			respStops = append(respStops, buildStopResponses(matchedStops, routeFilter, now)...)
 		}
 
 		log.Printf("[/api/arrivals] returning %d stops in %s", len(respStops), time.Since(now))
@@ -220,4 +169,71 @@ func ArrivalsHandler(nearbyService *service.NearbyArrivalsService) http.HandlerF
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(arrivalsResponse{Stops: respStops})
 	}
+}
+
+// buildStopResponses converts service-layer NearbyStopArrivals into API response
+// objects, grouping arrivals by route and computing ETA minutes from the given time.
+func buildStopResponses(matched []service.NearbyStopArrivals, routeFilter map[string]struct{}, now time.Time) []stopResponse {
+	var result []stopResponse
+	for _, m := range matched {
+		routeMap := make(map[string]*arrivalResponse)
+		var routeOrder []string
+		for _, a := range m.Arrivals {
+			if routeFilter != nil {
+				if _, ok := routeFilter[a.Route]; !ok {
+					continue
+				}
+			}
+			existing, ok := routeMap[a.Route]
+			if !ok {
+				existing = &arrivalResponse{
+					Route:       a.Route,
+					Destination: a.Destination,
+					DestTc:      a.DestTc,
+					DestSc:      a.DestSc,
+				}
+				if existing.Destination == "" {
+					existing.Destination = a.Direction
+				}
+				routeMap[a.Route] = existing
+				routeOrder = append(routeOrder, a.Route)
+			}
+			minutes := 0
+			if a.ETA != nil {
+				minutes = int(math.Max(0, math.Round(a.ETA.Sub(now).Minutes())))
+			}
+			existing.Etas = append(existing.Etas, etaResponse{
+				Minutes: minutes,
+				Remarks: a.Remark,
+			})
+		}
+
+		sort.Strings(routeOrder)
+		arrivals := make([]arrivalResponse, 0, len(routeOrder))
+		for _, route := range routeOrder {
+			resp := *routeMap[route]
+			if resp.Etas == nil {
+				resp.Etas = []etaResponse{}
+			}
+			arrivals = append(arrivals, resp)
+		}
+
+		// Skip stops with no arrivals
+		if len(arrivals) == 0 {
+			continue
+		}
+
+		result = append(result, stopResponse{
+			ID:       m.StopID,
+			Name:     m.StopName,
+			NameEn:   m.NameEn,
+			NameTc:   m.NameTc,
+			NameSc:   m.NameSc,
+			Lat:      m.Lat,
+			Lng:      m.Lon,
+			Distance: m.Distance,
+			Arrivals: arrivals,
+		})
+	}
+	return result
 }

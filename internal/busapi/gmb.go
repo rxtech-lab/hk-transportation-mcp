@@ -2,11 +2,13 @@ package busapi
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -183,13 +185,16 @@ func (g *GMBClient) FetchAllRoutes(ctx context.Context) ([]models.Route, error) 
 					bound := gmbBound(dir.RouteSeq)
 
 					route := models.Route{
-						RouteID:     fmt.Sprintf("GMB-%s-%s-%s-%s", region, routeCode, bound, svcType),
-						Route:       routeCode,
-						Bound:       bound,
-						ServiceType: svcType,
-						OrigEn:      dir.OrigEn,
-						DestEn:      dir.DestEn,
-						Operator:    opGMB,
+						RouteID:      fmt.Sprintf("GMB-%s-%s-%s-%s", region, routeCode, bound, svcType),
+						Route:        routeCode,
+						Bound:        bound,
+						ServiceType:  svcType,
+						OrigEn:       dir.OrigEn,
+						DestEn:       dir.DestEn,
+						DestTc:       dir.DestTc,
+						DestSc:       dir.DestSc,
+						Operator:     opGMB,
+						GmbNumericID: routeInfo.RouteID,
 					}
 					allRoutes = append(allRoutes, route)
 
@@ -213,6 +218,54 @@ func (g *GMBClient) FetchAllRoutes(ctx context.Context) ([]models.Route, error) 
 
 	log.Printf("gmb: fetched %d routes total across all regions", len(allRoutes))
 	return allRoutes, nil
+}
+
+// LoadRouteMappings populates the in-memory route ID and destination maps
+// from the database, so FetchETA does not need to call FetchAllRoutes.
+func (g *GMBClient) LoadRouteMappings(db *sql.DB) error {
+	rows, err := db.Query(
+		`SELECT route_id, route, bound, service_type, dest_en, dest_tc, dest_sc, gmb_numeric_id
+		 FROM routes WHERE operator = $1 AND gmb_numeric_id > 0`, opGMB)
+	if err != nil {
+		return fmt.Errorf("gmb: query route mappings: %w", err)
+	}
+	defer rows.Close()
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	count := 0
+	for rows.Next() {
+		var routeID, route, bound, svcType, destEn, destTc, destSc string
+		var numericID int64
+		if err := rows.Scan(&routeID, &route, &bound, &svcType, &destEn, &destTc, &destSc, &numericID); err != nil {
+			return fmt.Errorf("gmb: scan route mapping: %w", err)
+		}
+
+		// Extract region from routeID (format: GMB-{region}-{route}-{bound}-{svcType})
+		parts := strings.SplitN(routeID, "-", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		region := parts[1]
+
+		key := region + ":" + route + ":" + bound + ":" + svcType
+		g.routeIDMap[key] = numericID
+		g.routeCodeToIDs[route] = appendUnique(g.routeCodeToIDs[route], numericID)
+
+		// Determine route_seq from bound
+		routeSeq := gmbRouteSeq(bound)
+		destKey := fmt.Sprintf("%d:%d", numericID, routeSeq)
+		g.routeDestMap[destKey] = gmbDestInfo{
+			DestEn: destEn,
+			DestTc: destTc,
+			DestSc: destSc,
+		}
+		count++
+	}
+
+	log.Printf("gmb: loaded %d route mappings from database", count)
+	return rows.Err()
 }
 
 func (g *GMBClient) FetchAllStops(ctx context.Context) ([]models.BusStop, error) {
@@ -436,20 +489,11 @@ func (g *GMBClient) FetchRouteStops(ctx context.Context, route, bound, serviceTy
 }
 
 func (g *GMBClient) FetchETA(ctx context.Context, stopID, route string) ([]models.ETAArrival, error) {
-	// Look up all GMB route_ids for this route code
+	// Look up all GMB route_ids for this route code.
+	// These must be pre-loaded via LoadRouteMappings (from DB) or FetchAllRoutes (sync).
 	g.mu.RLock()
 	gmbRouteIDs := g.routeCodeToIDs[route]
 	g.mu.RUnlock()
-
-	// Lazily populate route mappings if not yet loaded (e.g. fresh server start).
-	if len(gmbRouteIDs) == 0 {
-		if _, err := g.FetchAllRoutes(ctx); err != nil {
-			return nil, fmt.Errorf("gmb: failed to populate routes for ETA: %w", err)
-		}
-		g.mu.RLock()
-		gmbRouteIDs = g.routeCodeToIDs[route]
-		g.mu.RUnlock()
-	}
 
 	if len(gmbRouteIDs) == 0 {
 		return []models.ETAArrival{}, nil

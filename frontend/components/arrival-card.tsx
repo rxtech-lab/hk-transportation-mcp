@@ -68,7 +68,7 @@ export function ArrivalCard({
         </div>
       )}
       <div className="divide-y divide-white/[0.04]">
-        {data.stops.map((stop, i) => (
+        {data.stops?.map((stop, i) => (
           <div key={i} className="px-4 py-3 space-y-2">
             {/* Stop name as clickable location button */}
             <button

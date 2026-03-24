@@ -68,8 +68,19 @@ type TransferRouteLeg struct {
 
 // Execute finds routes connecting origin area to destination area and fetches ETAs.
 func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, destLon, radiusOrigin, radiusDest float64, maxTransfers int) (*RouteArrivalsResult, error) {
-	originStops := s.index.FindNearby(lat, lon, radiusOrigin)
-	destStops := s.index.FindNearby(destLat, destLon, radiusDest)
+	// Find nearby stops at origin and destination concurrently
+	var originStops, destStops []models.BusStop
+	var findWg sync.WaitGroup
+	findWg.Add(2)
+	go func() {
+		defer findWg.Done()
+		originStops = s.index.FindNearby(lat, lon, radiusOrigin)
+	}()
+	go func() {
+		defer findWg.Done()
+		destStops = s.index.FindNearby(destLat, destLon, radiusDest)
+	}()
+	findWg.Wait()
 
 	if len(originStops) == 0 || len(destStops) == 0 {
 		return &RouteArrivalsResult{
@@ -171,6 +182,123 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 		wg      sync.WaitGroup
 	)
 
+	// Prepare transfer route search inputs (needed before goroutine)
+	originStopIDs := make([]string, len(originStops))
+	for i, s := range originStops {
+		originStopIDs[i] = s.StopID
+	}
+	destStopIDs := make([]string, len(destStops))
+	for i, s := range destStops {
+		destStopIDs[i] = s.StopID
+	}
+
+	// Run transfer route search concurrently with direct route ETA fetching
+	var transferRoutes []TransferRoute
+	var transferWg sync.WaitGroup
+	transferWg.Add(1)
+	go func() {
+		defer transferWg.Done()
+
+		transfers, err := s.index.FindTransferRoutes(originStopIDs, destStopIDs, maxTransfers, 10)
+		if err != nil {
+			log.Printf("transfer route search failed (origins=%d, dests=%d): %v", len(originStopIDs), len(destStopIDs), err)
+		}
+
+		// Fallback: when pgRouting returns no results, use Overpass + in-memory search
+		if len(transfers) == 0 && s.overpass != nil {
+			transfers = s.findTransferRoutesViaOverpass(ctx, lat, lon, destLat, destLon, originStopIDs, destStopIDs)
+		}
+
+		// Build transfer route structs (without ETAs first)
+		type pendingTransfer struct {
+			route     TransferRoute
+			boardStop models.BusStop
+			routeName string
+		}
+		var pending []pendingTransfer
+
+		for _, t := range transfers {
+			var legs []TransferRouteLeg
+			valid := true
+			busTransfers := 0
+			for _, leg := range t.Legs {
+				boardStop, ok := s.index.GetStop(leg.BoardStopID)
+				if !ok {
+					valid = false
+					break
+				}
+				alightStop, ok := s.index.GetStop(leg.AlightStopID)
+				if !ok {
+					valid = false
+					break
+				}
+				routeName := ""
+				if !leg.IsWalking {
+					routeName = extractRouteName(leg.RouteID)
+				}
+				legs = append(legs, TransferRouteLeg{
+					RouteID:    leg.RouteID,
+					RouteName:  routeName,
+					BoardStop:  boardStop,
+					AlightStop: alightStop,
+					IsWalking:  leg.IsWalking,
+				})
+			}
+			if !valid || len(legs) == 0 {
+				continue
+			}
+
+			// Count actual bus transfers
+			prevBusIdx := -1
+			for i, leg := range legs {
+				if !leg.IsWalking {
+					if prevBusIdx >= 0 {
+						busTransfers++
+					}
+					prevBusIdx = i
+				}
+			}
+			_ = prevBusIdx
+
+			// Find the first bus leg for ETA fetching
+			var boardStop models.BusStop
+			var routeName string
+			for _, leg := range legs {
+				if !leg.IsWalking {
+					boardStop = leg.BoardStop
+					routeName = leg.RouteName
+					break
+				}
+			}
+
+			pending = append(pending, pendingTransfer{
+				route:     TransferRoute{Legs: legs, NumTransfers: busTransfers},
+				boardStop: boardStop,
+				routeName: routeName,
+			})
+		}
+
+		// Fetch all first-leg ETAs in parallel
+		var etaWg sync.WaitGroup
+		for i := range pending {
+			if pending[i].routeName == "" {
+				continue
+			}
+			etaWg.Add(1)
+			go func(idx int) {
+				defer etaWg.Done()
+				etas := nearbyService.fetchETACached(ctx, pending[idx].boardStop, pending[idx].routeName)
+				pending[idx].route.FirstLegArrivals = etas
+			}(i)
+		}
+		etaWg.Wait()
+
+		for _, p := range pending {
+			transferRoutes = append(transferRoutes, p.route)
+		}
+	}()
+
+	// Direct route ETA fetching (runs concurrently with transfer search above)
 	for _, c := range uniqueCandidates {
 		wg.Add(1)
 		go func(c candidate) {
@@ -193,89 +321,7 @@ func (s *RouteArrivalsService) Execute(ctx context.Context, lat, lon, destLat, d
 	}
 
 	wg.Wait()
-
-	// --- Transfer routes (SQL) ---
-	originStopIDs := make([]string, len(originStops))
-	for i, s := range originStops {
-		originStopIDs[i] = s.StopID
-	}
-	destStopIDs := make([]string, len(destStops))
-	for i, s := range destStops {
-		destStopIDs[i] = s.StopID
-	}
-
-	var transferRoutes []TransferRoute
-
-	transfers, err := s.index.FindTransferRoutes(originStopIDs, destStopIDs, maxTransfers, 10)
-	if err != nil {
-		log.Printf("transfer route search failed (origins=%d, dests=%d): %v", len(originStopIDs), len(destStopIDs), err)
-	}
-
-	// Fallback: when pgRouting returns no results, use Overpass + in-memory search
-	if len(transfers) == 0 && s.overpass != nil {
-		transfers = s.findTransferRoutesViaOverpass(ctx, lat, lon, destLat, destLon, originStopIDs, destStopIDs)
-	}
-
-	for _, t := range transfers {
-		var legs []TransferRouteLeg
-		valid := true
-		busTransfers := 0
-		for _, leg := range t.Legs {
-			boardStop, ok := s.index.GetStop(leg.BoardStopID)
-			if !ok {
-				valid = false
-				break
-			}
-			alightStop, ok := s.index.GetStop(leg.AlightStopID)
-			if !ok {
-				valid = false
-				break
-			}
-			routeName := ""
-			if !leg.IsWalking {
-				routeName = extractRouteName(leg.RouteID)
-			}
-			legs = append(legs, TransferRouteLeg{
-				RouteID:    leg.RouteID,
-				RouteName:  routeName,
-				BoardStop:  boardStop,
-				AlightStop: alightStop,
-				IsWalking:  leg.IsWalking,
-			})
-		}
-		if !valid || len(legs) == 0 {
-			continue
-		}
-
-		// Count actual bus transfers — the number of times the passenger
-		// switches from one bus route to another (walking legs in between
-		// are transparent and don't add to the count).
-		prevBusIdx := -1
-		for i, leg := range legs {
-			if !leg.IsWalking {
-				if prevBusIdx >= 0 {
-					busTransfers++
-				}
-				prevBusIdx = i
-			}
-		}
-		_ = prevBusIdx
-
-		// Fetch ETAs for the first bus leg
-		var etas []models.ETAArrival
-		for _, leg := range legs {
-			if !leg.IsWalking {
-				etas = nearbyService.fetchETACached(ctx, leg.BoardStop, leg.RouteName)
-				break
-			}
-		}
-
-		transferRoutes = append(transferRoutes, TransferRoute{
-			Legs:             legs,
-			NumTransfers:     busTransfers,
-			FirstLegArrivals: etas,
-		})
-	}
+	transferWg.Wait()
 
 	if results == nil {
 		results = []CandidateRoute{}

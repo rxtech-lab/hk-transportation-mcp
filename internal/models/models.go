@@ -15,13 +15,16 @@ type BusStop struct {
 
 // Route represents a bus route.
 type Route struct {
-	RouteID     string `json:"route_id"`
-	Route       string `json:"route"`
-	Bound       string `json:"bound"`
-	ServiceType string `json:"service_type"`
-	OrigEn      string `json:"orig_en"`
-	DestEn      string `json:"dest_en"`
-	Operator    string `json:"operator"`
+	RouteID      string `json:"route_id"`
+	Route        string `json:"route"`
+	Bound        string `json:"bound"`
+	ServiceType  string `json:"service_type"`
+	OrigEn       string `json:"orig_en"`
+	DestEn       string `json:"dest_en"`
+	DestTc       string `json:"dest_tc"`
+	DestSc       string `json:"dest_sc"`
+	Operator     string `json:"operator"`
+	GmbNumericID int64  `json:"gmb_numeric_id,omitempty"`
 }
 
 // RouteStop represents the association between a route and a stop.

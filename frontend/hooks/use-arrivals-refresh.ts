@@ -9,7 +9,7 @@ const REFRESH_INTERVAL = 30_000;
 
 async function fetchArrivals(
   stops: { id?: string; lat: number; lng: number }[],
-): Promise<DisplayArrivalsInput["stops"]> {
+): Promise<NonNullable<DisplayArrivalsInput["stops"]>> {
   const res = await fetch(`${BACKEND_URL}/api/arrivals`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -20,12 +20,22 @@ async function fetchArrivals(
   return data.stops ?? [];
 }
 
+async function fetchArrivalsFromURL(
+  url: string,
+): Promise<NonNullable<DisplayArrivalsInput["stops"]>> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch arrivals from URL");
+  const data = await res.json();
+  return data.stops ?? [];
+}
+
 export function useArrivalsRefresh(
   arrivalsData: DisplayArrivalsInput | null,
   setArrivalsData: (data: DisplayArrivalsInput | null) => void,
 ) {
   const stops = arrivalsData?.stops;
   const hasStops = !!stops?.length;
+  const refreshURL = arrivalsData?.url;
 
   const queryStops = useMemo(
     () =>
@@ -45,11 +55,20 @@ export function useArrivalsRefresh(
     [queryStops],
   );
 
-  // Keep a ref so queryFn always reads the latest stops
+  // Keep refs so queryFn always reads the latest values
   const queryStopsRef = useRef(queryStops);
   useEffect(() => {
     queryStopsRef.current = queryStops;
   }, [queryStops]);
+  const refreshURLRef = useRef(refreshURL);
+  useEffect(() => {
+    refreshURLRef.current = refreshURL;
+  }, [refreshURL]);
+
+  const enabled = hasStops || !!refreshURL;
+  const queryKey = refreshURL
+    ? ["arrivals-url", refreshURL]
+    : ["arrivals", queryKeyStops];
 
   const {
     data: freshStops,
@@ -57,17 +76,29 @@ export function useArrivalsRefresh(
     refetch,
     isFetching,
   } = useQuery({
-    queryKey: ["arrivals", queryKeyStops],
-    queryFn: () => fetchArrivals(queryStopsRef.current),
-    enabled: hasStops,
+    queryKey,
+    queryFn: () =>
+      refreshURLRef.current
+        ? fetchArrivalsFromURL(refreshURLRef.current)
+        : fetchArrivals(queryStopsRef.current),
+    enabled,
     refetchInterval: REFRESH_INTERVAL,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
 
-  // Merge fresh ETAs into existing arrivals data, preserving original destination names
+  // Merge fresh ETAs into existing arrivals data
   useEffect(() => {
-    if (!freshStops?.length || !arrivalsData?.stops?.length) return;
+    if (!freshStops?.length || !arrivalsData) return;
+
+    if (refreshURLRef.current) {
+      // URL-based: replace stops entirely with fresh data
+      setArrivalsData({ ...arrivalsData, stops: freshStops });
+      return;
+    }
+
+    // Legacy: merge fresh ETAs into existing stops
+    if (!arrivalsData.stops?.length) return;
 
     const freshMap = new Map<string, (typeof freshStops)[0]>();
     for (const s of freshStops) {

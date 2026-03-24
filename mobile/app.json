@@ -8,6 +8,7 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "buildNumber": "1",
       "bundleIdentifier": "com.rxlab.hktransport",
       "icon": "./assets/images/ios-icon.png",
       "entitlements": {
@@ -20,6 +21,7 @@
       }
     },
     "android": {
+      "versionCode": 1,
       "package": "com.rxlab.hktransport",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",

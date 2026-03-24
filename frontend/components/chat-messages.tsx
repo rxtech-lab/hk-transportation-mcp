@@ -78,7 +78,7 @@ function extractMapData(messages: UIMessage[], arrivalsData?: DisplayArrivalsInp
   }
 
   // Build a lookup from arrivalsData for fresh arrival info
-  const freshArrivals = new Map<string, DisplayArrivalsInput["stops"][0]>();
+  const freshArrivals = new Map<string, NonNullable<DisplayArrivalsInput["stops"]>[0]>();
   if (arrivalsData?.stops) {
     for (const s of arrivalsData.stops) {
       const key = s.id || `${s.lat},${s.lng}`;

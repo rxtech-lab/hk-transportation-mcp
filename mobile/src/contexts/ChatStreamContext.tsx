@@ -17,10 +17,24 @@ import { fetch as expoFetch } from "expo/fetch";
 import * as Haptics from "expo-haptics";
 
 import { useGeolocation } from "@/hooks/useGeolocation";
-import { FRONTEND_URL } from "@/lib/config";
+import { FRONTEND_URL, BACKEND_URL } from "@/lib/config";
 import { updateWidget } from "@/lib/widget";
 import { startTracking } from "@/lib/live-activity";
 import type { DisplayArrivalsInput } from "@/lib/types";
+
+async function fetchArrivalsFromURL(
+  url: string,
+): Promise<DisplayArrivalsInput> {
+  // Rewrite the host to BACKEND_URL so it works in the mobile environment
+  const parsed = new URL(url);
+  const backend = new URL(BACKEND_URL);
+  parsed.protocol = backend.protocol;
+  parsed.host = backend.host;
+  const res = await fetch(parsed.toString());
+  if (!res.ok) throw new Error("Failed to fetch arrivals from URL");
+  const data = await res.json();
+  return { stops: data.stops ?? [] };
+}
 
 type ChatStreamContextValue = {
   currentChatId: string | null;
@@ -36,6 +50,8 @@ type ChatStreamContextValue = {
   setMessages: UseChatHelpers<UIMessage>["setMessages"];
   addToolOutput: UseChatHelpers<UIMessage>["addToolOutput"];
   geo: ReturnType<typeof useGeolocation>;
+  fetchedArrivals: React.RefObject<Map<string, DisplayArrivalsInput>>;
+  fetchedArrivalsVersion: number;
 };
 
 export const ChatStreamContext = createContext<ChatStreamContextValue>({
@@ -57,6 +73,8 @@ export const ChatStreamContext = createContext<ChatStreamContextValue>({
     request: () => Promise.resolve(null),
     openSettings: () => {},
   },
+  fetchedArrivals: { current: new Map() },
+  fetchedArrivalsVersion: 0,
 });
 
 export function ChatStreamProvider({ children }: { children: ReactNode }) {
@@ -68,6 +86,8 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
   const geo = useGeolocation();
   const geoRef = useRef(geo);
   geoRef.current = geo;
+  const fetchedArrivals = useRef(new Map<string, DisplayArrivalsInput>());
+  const [fetchedArrivalsVersion, setFetchedArrivalsVersion] = useState(0);
 
   const chatHookId = currentChatId
     ? `session-${currentChatId}`
@@ -105,13 +125,31 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
     onToolCall({ toolCall }) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (toolCall.toolName === "display_arrivals") {
-        updateWidget(toolCall.input as DisplayArrivalsInput);
+        const input = toolCall.input as DisplayArrivalsInput;
+        // Always send tool output immediately so the AI stream doesn't stall
         addToolOutput({
           tool: "display_arrivals" as never,
           toolCallId: toolCall.toolCallId,
           output: "Arrival card displayed to user.",
         });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        if (input.url && !input.stops?.length) {
+          // URL-based flow: fetch data from backend URL in background
+          fetchArrivalsFromURL(input.url)
+            .then((resolved) => {
+              const data = { ...resolved, title: input.title, url: input.url };
+              fetchedArrivals.current.set(toolCall.toolCallId, data);
+              setFetchedArrivalsVersion((v) => v + 1);
+              updateWidget(data);
+            })
+            .catch(() => {
+              // Fetch failed; card will show loading state
+            });
+        } else {
+          // Legacy flow: stops data passed directly
+          updateWidget(input);
+        }
       }
       if (toolCall.toolName === "show_live_activity") {
         const input = toolCall.input as {
@@ -220,6 +258,8 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         setMessages,
         addToolOutput,
         geo,
+        fetchedArrivals,
+        fetchedArrivalsVersion,
       }}
     >
       {children}

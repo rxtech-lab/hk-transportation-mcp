@@ -69,6 +69,8 @@ export default function ChatScreen() {
     setMessages,
     addToolOutput,
     geo,
+    fetchedArrivals,
+    fetchedArrivalsVersion,
   } = use(ChatStreamContext);
 
   useEffect(() => {
@@ -221,6 +223,7 @@ export default function ChatScreen() {
 
   const arrivalsFromMessages = useMemo(() => {
     let last: DisplayArrivalsInput | null = null;
+    let lastToolCallId: string | null = null;
     for (const msg of messages) {
       if (msg.role !== "assistant") continue;
       for (const part of msg.parts) {
@@ -231,12 +234,20 @@ export default function ChatScreen() {
               : part.type.replace(/^tool-/, "");
           if (tn === "display_arrivals" && part.input) {
             last = part.input as DisplayArrivalsInput;
+            lastToolCallId = part.toolCallId;
           }
         }
       }
     }
+    // For URL-based inputs, resolve from fetchedArrivals
+    if (last && !last.stops?.length && lastToolCallId) {
+      const fetched = fetchedArrivals.current.get(lastToolCallId);
+      if (fetched) {
+        last = { ...fetched, url: last.url };
+      }
+    }
     return last;
-  }, [messages]);
+  }, [messages, fetchedArrivals, fetchedArrivalsVersion]);
 
   const arrivalsData = arrivalsOverride ?? arrivalsFromMessages;
   const {

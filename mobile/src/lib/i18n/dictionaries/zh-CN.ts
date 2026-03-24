@@ -31,6 +31,9 @@ export default {
     locationOn: "已开启",
     locationOff: "已关闭",
     locationNotSet: "未设置",
+    privacyPolicy: "隐私政策",
+    termsConditions: "使用条款",
+    version: "版本",
   },
   tabs: {
     transport: "交通",

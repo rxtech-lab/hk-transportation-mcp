@@ -16,8 +16,9 @@ export default function SettingsLayout() {
         contentStyle: { backgroundColor: theme.background },
       }}
     >
-      <Stack.Screen name="index" options={{ title: dict.tabs.settings, headerShadowVisible: false }} />
-      <Stack.Screen name="language" options={{ title: dict.settings.language, headerShadowVisible: false }} />
+      <Stack.Screen name="index" options={{ title: dict.tabs.settings, headerShadowVisible: false, headerTransparent: true, headerStyle: { backgroundColor: "transparent" }, contentStyle: { backgroundColor: "transparent" } }} />
+      <Stack.Screen name="language" options={{ title: dict.settings.language, headerShadowVisible: false, headerTransparent: true, headerStyle: { backgroundColor: "transparent" }, contentStyle: { backgroundColor: "transparent" } }} />
+      <Stack.Screen name="legal" options={{ headerShadowVisible: false }} />
     </Stack>
   );
 }

@@ -31,6 +31,9 @@ export default {
     locationOn: "On",
     locationOff: "Off",
     locationNotSet: "Not Set",
+    privacyPolicy: "Privacy Policy",
+    termsConditions: "Terms & Conditions",
+    version: "Version",
   },
   tabs: {
     transport: "Transport",

@@ -50,7 +50,10 @@ func migrate(db *sql.DB) error {
 			service_type TEXT NOT NULL DEFAULT '1',
 			orig_en TEXT NOT NULL DEFAULT '',
 			dest_en TEXT NOT NULL DEFAULT '',
-			operator TEXT NOT NULL
+			dest_tc TEXT NOT NULL DEFAULT '',
+			dest_sc TEXT NOT NULL DEFAULT '',
+			operator TEXT NOT NULL,
+			gmb_numeric_id BIGINT NOT NULL DEFAULT 0
 		)`,
 		`CREATE TABLE IF NOT EXISTS route_stops (
 			route_id TEXT NOT NULL,
@@ -82,6 +85,10 @@ func migrate(db *sql.DB) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_messages_jid ON chat_messages(jid, created_at DESC)`,
+		// Add new columns to routes table (no-op if already present)
+		`ALTER TABLE routes ADD COLUMN IF NOT EXISTS dest_tc TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE routes ADD COLUMN IF NOT EXISTS dest_sc TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE routes ADD COLUMN IF NOT EXISTS gmb_numeric_id BIGINT NOT NULL DEFAULT 0`,
 	}
 
 	for _, stmt := range statements {

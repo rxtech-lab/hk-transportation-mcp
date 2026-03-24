@@ -371,21 +371,8 @@ func TestGMBClientFetchETA(t *testing.T) {
 	}
 }
 
-func TestGMBClientFetchETALazyLoading(t *testing.T) {
+func TestGMBClientFetchETARequiresPreload(t *testing.T) {
 	mux := setupTestMux()
-	mux.HandleFunc("/eta/route-stop/2003045/20001", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(gmbResponse[[]gmbETARouteStop]{
-			Data: []gmbETARouteStop{
-				{
-					RouteSeq: 1,
-					StopSeq:  1,
-					ETAs: []gmbETA{
-						{Timestamp: "2026-03-23T10:05:00+08:00", RemarksEn: ""},
-					},
-				},
-			},
-		})
-	})
 
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -393,17 +380,13 @@ func TestGMBClientFetchETALazyLoading(t *testing.T) {
 	// Create a fresh client without calling FetchAllRoutes first
 	client := newTestGMBClient(srv)
 
-	// FetchETA should lazily load routes and return results
+	// FetchETA without pre-loaded routes should return empty (no lazy loading)
 	arrivals, err := client.FetchETA(context.Background(), "20001", "1A")
 	if err != nil {
-		t.Fatalf("FetchETA with lazy loading: %v", err)
+		t.Fatalf("FetchETA: %v", err)
 	}
-
-	if len(arrivals) != 1 {
-		t.Fatalf("expected 1 arrival after lazy loading, got %d", len(arrivals))
-	}
-	if arrivals[0].Destination != "Stanley" {
-		t.Errorf("expected destination Stanley after lazy load, got %s", arrivals[0].Destination)
+	if len(arrivals) != 0 {
+		t.Fatalf("expected 0 arrivals without pre-loaded routes, got %d", len(arrivals))
 	}
 }
 
@@ -415,7 +398,7 @@ func TestGMBClientFetchETANoRouteIDs(t *testing.T) {
 
 	client := newTestGMBClient(srv)
 
-	// Unknown route should return empty even after lazy-loading routes
+	// Unknown route should return empty
 	arrivals, err := client.FetchETA(context.Background(), "20001", "unknown")
 	if err != nil {
 		t.Fatalf("FetchETA: %v", err)

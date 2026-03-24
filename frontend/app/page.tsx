@@ -47,7 +47,7 @@ export default function Home() {
           // Update map with stops from arrival data
           if (input.stops?.length) {
             setMapData((prev) => {
-              const newStops = input.stops
+              const newStops = input.stops!
                 .filter(
                   (s) =>
                     typeof s.lat === "number" && typeof s.lng === "number"

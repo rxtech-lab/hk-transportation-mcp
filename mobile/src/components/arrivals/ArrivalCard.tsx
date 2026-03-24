@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -6,14 +6,21 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
-  Animated,
 } from "react-native";
 import { useRouter, useSegments } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { EtaPill } from "./EtaPill";
 import { useTheme } from "@/hooks/use-theme";
-import { useLocalizedStopName, useLocalizedDestination } from "@/lib/i18n/i18n-provider";
-import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
+import {
+  useLocalizedStopName,
+  useLocalizedDestination,
+} from "@/lib/i18n/i18n-provider";
+import type {
+  DisplayArrivalsInput,
+  LocationPin,
+  StopData,
+  ArrivalData,
+} from "@/lib/types";
 import { getTrackedInfo } from "@/lib/live-activity";
 
 function formatTime(timestamp: number): string {
@@ -46,29 +53,16 @@ export function ArrivalCard({
   const segments = useSegments();
   const getStopName = useLocalizedStopName();
   const getDestination = useLocalizedDestination();
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const prevRefreshing = useRef(isRefreshing);
   const trackedKey = (() => {
     const info = getTrackedInfo();
     return info ? `${info.route}:${info.stopId}` : null;
   })();
 
-  useEffect(() => {
-    if (prevRefreshing.current !== isRefreshing) {
-      prevRefreshing.current = isRefreshing;
-      fadeAnim.setValue(0);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [isRefreshing, fadeAnim]);
-
   const handleRouteBadgePress = useCallback(
-    (stop: (typeof data.stops)[number], arrival: (typeof data.stops)[number]["arrivals"][number]) => {
+    (stop: StopData, arrival: ArrivalData) => {
       const dest = getDestination(arrival);
-      const routePrefix = segments[0] === "history" ? "/history" : "/(transport)";
+      const routePrefix =
+        segments[0] === "history" ? "/history" : "/(transport)";
       router.push({
         pathname: `${routePrefix}/route` as any,
         params: {
@@ -81,8 +75,41 @@ export function ArrivalCard({
     [router, segments, getDestination],
   );
 
+  // Filter out stops with no arrivals
+  const stopsWithArrivals =
+    data.stops?.filter((s) => s.arrivals?.length > 0) ?? [];
+
+  if (!stopsWithArrivals.length && !data.url) return null;
+
+  // URL-based flow: show loading state while stops are being fetched
+  if (!stopsWithArrivals.length && data.url) {
+    return (
+      <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+        <View style={[styles.header, { borderBottomColor: theme.separator }]}>
+          {data.title ? (
+            <Text
+              style={[styles.title, { color: theme.text }]}
+              numberOfLines={2}
+            >
+              {data.title}
+            </Text>
+          ) : null}
+          <View style={styles.refreshRow}>
+            <ActivityIndicator size="small" color="#007AFF" />
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.card, { backgroundColor: theme.cardBackground }, stale && styles.stale]}>
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: theme.cardBackground },
+        stale && styles.stale,
+      ]}
+    >
       {/* Header: title + refresh */}
       {(data.title || onRefresh) && (
         <View style={[styles.header, { borderBottomColor: theme.separator }]}>
@@ -92,20 +119,32 @@ export function ArrivalCard({
             disabled={!onHeaderPress}
           >
             {data.title ? (
-              <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>
+              <Text
+                style={[styles.title, { color: theme.text }]}
+                numberOfLines={2}
+              >
                 {data.title}
               </Text>
             ) : null}
             {onHeaderPress && (
-              <Ionicons name="expand-outline" size={16} color={theme.chevronColor} />
+              <Ionicons
+                name="expand-outline"
+                size={16}
+                color={theme.chevronColor}
+              />
             )}
           </Pressable>
           {onRefresh && (
             <View style={styles.refreshRow}>
               {lastRefreshedAt ? (
-                <Animated.Text style={[styles.refreshTime, { color: theme.chevronColor, opacity: fadeAnim }]}>
+                <Text
+                  style={[
+                    styles.refreshTime,
+                    { color: theme.chevronColor },
+                  ]}
+                >
                   Updated {formatTime(lastRefreshedAt)}
-                </Animated.Text>
+                </Text>
               ) : null}
               <Pressable
                 onPress={onRefresh}
@@ -116,16 +155,20 @@ export function ArrivalCard({
                   pressed && styles.refreshButtonPressed,
                 ]}
               >
-                <Animated.View style={[styles.refreshIconWrap, { opacity: fadeAnim }]}>
+                <View style={styles.refreshIconWrap}>
                   {isRefreshing ? (
-                    <ActivityIndicator size="small" color="#007AFF" style={styles.refreshSpinner} />
+                    <ActivityIndicator
+                      size="small"
+                      color="#007AFF"
+                      style={styles.refreshSpinner}
+                    />
                   ) : (
                     <Ionicons name="refresh" size={12} color="#007AFF" />
                   )}
                   <Text style={styles.refreshLabel}>
                     {isRefreshing ? "Updating" : "Refresh"}
                   </Text>
-                </Animated.View>
+                </View>
               </Pressable>
             </View>
           )}
@@ -133,96 +176,111 @@ export function ArrivalCard({
       )}
 
       {/* Stop sections */}
-      {data.stops.map((stop, i) => {
+      {stopsWithArrivals.map((stop, i) => {
         const localizedName = getStopName(stop);
         return (
-        <View
-          key={i}
-          style={[styles.stopSection, i > 0 && [styles.stopSeparator, { borderTopColor: theme.separator }]]}
-        >
-          {/* Stop name */}
-          <Pressable
-            onPress={() =>
-              onLocationClick?.({
-                name: localizedName,
-                lat: stop.lat,
-                lng: stop.lng,
-              })
-            }
-            style={({ pressed }) => [
-              styles.stopNameRow,
-              pressed && styles.stopNamePressed,
+          <View
+            key={i}
+            style={[
+              styles.stopSection,
+              i > 0 && [
+                styles.stopSeparator,
+                { borderTopColor: theme.separator },
+              ],
             ]}
           >
-            <View style={styles.stopIcon}>
-              <Ionicons name="location" size={12} color="#007AFF" />
-            </View>
-            <Text style={styles.stopName} numberOfLines={1}>
-              {localizedName}
-            </Text>
-            <Ionicons
-              name="chevron-forward"
-              size={12}
-              color={theme.chevronColor}
-            />
-          </Pressable>
-
-          {/* Arrivals for this stop */}
-          {stop.arrivals.map((arrival, j) => {
-            const dest = getDestination(arrival);
-            const showDest =
-              dest &&
-              !["N/A", "Inbound", "Outbound", "-"].includes(
-                dest.trim(),
-              );
-
-            return (
-              <View
-                key={j}
-                style={[styles.arrivalItem, j > 0 && styles.arrivalSeparator]}
-              >
-                {/* Route + destination row */}
-                <View style={styles.routeRow}>
-                  <Pressable
-                    onPress={() => handleRouteBadgePress(stop, arrival)}
-                    style={({ pressed }) => [
-                      styles.routeBadge,
-                      trackedKey === `${arrival.route}:${stop.id}` && styles.routeBadgeTracked,
-                      pressed && styles.routeBadgePressed,
-                    ]}
-                  >
-                    <Ionicons
-                      name={trackedKey === `${arrival.route}:${stop.id}` ? "radio" : "bus"}
-                      size={10}
-                      color="#fff"
-                    />
-                    <Text style={styles.routeNumber}>{arrival.route}</Text>
-                  </Pressable>
-                  {showDest && (
-                    <Text style={[styles.destination, { color: theme.textSecondary }]} numberOfLines={1}>
-                      {dest}
-                    </Text>
-                  )}
-                </View>
-
-                {/* ETA pills */}
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.etaContainer}
-                >
-                  {arrival.etas.map((eta, k) => (
-                    <EtaPill
-                      key={k}
-                      minutes={eta.minutes}
-                      remarks={eta.remarks}
-                    />
-                  ))}
-                </ScrollView>
+            {/* Stop name */}
+            <Pressable
+              onPress={() =>
+                onLocationClick?.({
+                  name: localizedName,
+                  lat: stop.lat,
+                  lng: stop.lng,
+                })
+              }
+              style={({ pressed }) => [
+                styles.stopNameRow,
+                pressed && styles.stopNamePressed,
+              ]}
+            >
+              <View style={styles.stopIcon}>
+                <Ionicons name="location" size={12} color="#007AFF" />
               </View>
-            );
-          })}
-        </View>
+              <Text style={styles.stopName} numberOfLines={1}>
+                {localizedName}
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={12}
+                color={theme.chevronColor}
+              />
+            </Pressable>
+
+            {/* Arrivals for this stop */}
+            {stop.arrivals.map((arrival, j) => {
+              const dest = getDestination(arrival);
+              const showDest =
+                dest &&
+                !["N/A", "Inbound", "Outbound", "-"].includes(dest.trim());
+
+              return (
+                <View
+                  key={j}
+                  style={[styles.arrivalItem, j > 0 && styles.arrivalSeparator]}
+                >
+                  {/* Route + destination row */}
+                  <View style={styles.routeRow}>
+                    <Pressable
+                      onPress={() => handleRouteBadgePress(stop, arrival)}
+                      style={({ pressed }) => [
+                        styles.routeBadge,
+                        trackedKey === `${arrival.route}:${stop.id}` &&
+                          styles.routeBadgeTracked,
+                        pressed && styles.routeBadgePressed,
+                      ]}
+                    >
+                      <Ionicons
+                        name={
+                          trackedKey === `${arrival.route}:${stop.id}`
+                            ? "radio"
+                            : "bus"
+                        }
+                        size={10}
+                        color="#fff"
+                      />
+                      <Text style={styles.routeNumber}>{arrival.route}</Text>
+                    </Pressable>
+                    {showDest && (
+                      <Text
+                        style={[
+                          styles.destination,
+                          { color: theme.textSecondary },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {dest}
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* ETA pills */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.etaContainer}
+                  >
+                    {arrival.etas.map((eta, k) => (
+                      <EtaPill
+                        key={k}
+                        minutes={eta.minutes}
+                        remarks={eta.remarks}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+              );
+            })}
+          </View>
         );
       })}
     </View>

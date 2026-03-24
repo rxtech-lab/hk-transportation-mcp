@@ -112,11 +112,9 @@ Examples:
 
 This syntax will be rendered as an interactive button that shows the location on a map. Always use this format instead of listing coordinates as plain text. You can use it inline within sentences or in lists.
 
-IMPORTANT: After you receive arrival/ETA data from MCP tools (e.g. nearby_arrivals, route_arrivals, stop_arrivals), you MUST call the display_arrivals tool to present the data as a rich visual card. Extract the stop names, coordinates, routes, destinations, and ETA minutes from the MCP tool results and pass them to display_arrivals. Always include lat/lng for each stop so they appear on the map. When you call display_arrivals, do NOT also include a text table or summary of the same arrival data — the card already shows it visually. Just provide a brief natural language response (e.g. "Here are the upcoming arrivals") alongside the tool call.
+IMPORTANT: After you receive arrival/ETA data from MCP tools (e.g. nearby_arrivals, route_arrivals), you MUST call the display_arrivals tool to present the data as a rich visual card. Pass the "display_url" value from the MCP response as the "url" field in display_arrivals. Do NOT pass the stops/arrival data — the frontend fetches it directly from the URL. Include a "title" if appropriate (e.g. "Nearby arrivals" or the route name). When you call display_arrivals, do NOT also include a text table or summary of the same arrival data — the card already shows it visually. Just provide a brief natural language response (e.g. "Here are the upcoming arrivals") alongside the tool call.
 
-For the "destination" field in each arrival: use the destination name from the MCP response if available. If only a direction like "I"/"O" or "inbound"/"outbound" is provided, use that. If no destination info is available, use an empty string.
-
-CRITICAL: Every stop in display_arrivals MUST have an "id" field set to the stop_id from the MCP response (e.g. "KMB-ABC123"). The stop_id is found in each stop object returned by MCP tools. Without it, real-time auto-refresh will not work. Never omit the id field.${hasLiveActivity ? `
+If the MCP response does not include a display_url, fall back to extracting stop data manually: extract stop names, coordinates, routes, destinations, and ETA minutes and pass them as "stops". Every stop MUST have an "id" field set to the stop_id from the MCP response for real-time auto-refresh.${hasLiveActivity ? `
 
 After showing arrival data for a specific route, proactively ask the user if they'd like to track the bus on their Lock Screen. If the user agrees, call show_live_activity with the route details including the route number, stop name, stop ID, destination, and current ETAs.` : ""}`,
     });

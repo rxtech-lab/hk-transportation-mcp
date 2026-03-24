@@ -22,12 +22,13 @@ const stopSchema = z.object({
 
 export const displayArrivalsSchema = z.object({
   title: z.string().optional(),
-  stops: z.array(stopSchema),
+  url: z.string().optional().describe("The display_url from the MCP tool response. Frontend fetches arrival data from this URL instead of requiring stops data."),
+  stops: z.array(stopSchema).optional(),
 });
 
 export const displayArrivalsTool = tool({
   description:
-    "Display bus arrival info as a rich card and show stops on map. Call after processing MCP arrival data. You MUST include the stop_id from the MCP response as the 'id' field for each stop.",
+    "Display bus arrival info as a rich card. Pass the display_url from the MCP tool response as the 'url' field. The frontend fetches arrival data directly from the URL. Only include 'stops' if no display_url is available.",
   inputSchema: displayArrivalsSchema,
   // No execute — client-side tool
 });

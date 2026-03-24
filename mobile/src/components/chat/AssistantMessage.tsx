@@ -17,6 +17,7 @@ interface AssistantMessageProps {
   toolPartsToRender: Set<string>;
   lastArrivalsToolCallId: string | null;
   arrivalsData?: DisplayArrivalsInput | null;
+  fetchedArrivals?: Map<string, DisplayArrivalsInput>;
   onLocationClick?: (pin: LocationPin) => void;
   lastRefreshedAt?: number | null;
   onRefresh?: () => void;
@@ -30,6 +31,7 @@ export function AssistantMessage({
   toolPartsToRender,
   lastArrivalsToolCallId,
   arrivalsData,
+  fetchedArrivals,
   onLocationClick,
   lastRefreshedAt,
   onRefresh,
@@ -63,10 +65,15 @@ export function AssistantMessage({
           if (toolName === "display_arrivals" && part.input) {
             const isLatest =
               part.toolCallId === lastArrivalsToolCallId;
+            const input = part.input as DisplayArrivalsInput;
+            // Resolve card data: prefer live refresh > fetched from URL > inline stops
+            const resolvedInput = input.stops?.length
+              ? input
+              : fetchedArrivals?.get(part.toolCallId) ?? input;
             const cardData =
               isLatest && arrivalsData
                 ? arrivalsData
-                : (part.input as DisplayArrivalsInput);
+                : resolvedInput;
             return (
               <View key={part.toolCallId} style={styles.toolRow}>
                 <ArrivalCard

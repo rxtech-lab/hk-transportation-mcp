@@ -7,7 +7,6 @@ import {
   Pressable,
   StyleSheet,
   RefreshControl,
-  ScrollView,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -160,15 +159,11 @@ export default function NearbyScreen() {
               </Text>
             )}
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.etaRow}
-          >
+          <View style={styles.etaRow}>
             {item.etas.map((eta, k) => (
               <EtaPill key={k} minutes={eta.minutes} remarks={eta.remarks} />
             ))}
-          </ScrollView>
+          </View>
           <Ionicons
             name="chevron-forward"
             size={14}
@@ -370,7 +365,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.08,
   },
   etaRow: {
+    flex: 1,
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 6,
   },
   statusText: {
