@@ -294,6 +294,43 @@ private func truncateStops(_ stops: [WidgetStop], maxRows: Int) -> [(stop: Widge
   return result
 }
 
+// MARK: - Adaptive ETA badges
+
+/// Displays ETA badges that fit the available width.
+/// Tries showing `maxCount` badges first; falls back to `maxCount - 1` if they don't fit.
+struct AdaptiveETABadges: View {
+  let etas: [WidgetEta]
+  let maxCount: Int
+  let font: Font
+  let hPad: CGFloat
+  let vPad: CGFloat
+  let cornerRadius: CGFloat
+
+  var body: some View {
+    ViewThatFits(in: .horizontal) {
+      etaBadges(count: maxCount)
+      etaBadges(count: max(maxCount - 1, 1))
+    }
+  }
+
+  @ViewBuilder
+  private func etaBadges(count: Int) -> some View {
+    HStack(spacing: 3) {
+      ForEach(Array(etas.prefix(count).enumerated()), id: \.offset) { _, eta in
+        Text(etaText(eta.minutes))
+          .font(font)
+          .fontWeight(.semibold)
+          .foregroundColor(.white)
+          .padding(.horizontal, hPad)
+          .padding(.vertical, vPad)
+          .background(etaColor(eta.minutes))
+          .cornerRadius(cornerRadius)
+          .fixedSize()
+      }
+    }
+  }
+}
+
 // MARK: - Medium Widget
 
 struct MediumWidgetView: View {
@@ -332,6 +369,7 @@ struct MediumWidgetView: View {
                 .fontWeight(.bold)
                 .foregroundColor(operatorColor(arrival.operatorCode))
                 .frame(minWidth: 32, alignment: .leading)
+                .fixedSize()
 
               Text(arrival.destination)
                 .font(.caption2)
@@ -340,18 +378,14 @@ struct MediumWidgetView: View {
 
               Spacer()
 
-              HStack(spacing: 3) {
-                ForEach(Array(arrival.etas.prefix(3).enumerated()), id: \.offset) { _, eta in
-                  Text(etaText(eta.minutes))
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(etaColor(eta.minutes))
-                    .cornerRadius(4)
-                }
-              }
+              AdaptiveETABadges(
+                etas: arrival.etas,
+                maxCount: 3,
+                font: .caption2,
+                hPad: 5,
+                vPad: 2,
+                cornerRadius: 4
+              )
             }
           }
         }
@@ -415,6 +449,7 @@ struct LargeWidgetView: View {
                 .fontWeight(.bold)
                 .foregroundColor(operatorColor(arrival.operatorCode))
                 .frame(minWidth: 36, alignment: .leading)
+                .fixedSize()
 
               Text(arrival.destination)
                 .font(.caption)
@@ -423,18 +458,14 @@ struct LargeWidgetView: View {
 
               Spacer()
 
-              HStack(spacing: 3) {
-                ForEach(Array(arrival.etas.prefix(3).enumerated()), id: \.offset) { _, eta in
-                  Text(etaText(eta.minutes))
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(etaColor(eta.minutes))
-                    .cornerRadius(5)
-                }
-              }
+              AdaptiveETABadges(
+                etas: arrival.etas,
+                maxCount: 3,
+                font: .caption,
+                hPad: 6,
+                vPad: 3,
+                cornerRadius: 5
+              )
             }
           }
         }

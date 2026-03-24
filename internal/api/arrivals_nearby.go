@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/service"
@@ -45,7 +46,18 @@ func NearbyArrivalsGETHandler(nearbyService *service.NearbyArrivalsService) http
 			}
 		}
 
-		log.Printf("[/api/arrivals/nearby] lat=%.6f lon=%.6f radius=%.0f", lat, lon, radius)
+		// Optional route filter: comma-separated route names
+		var routeFilter map[string]struct{}
+		if v := q.Get("routes"); v != "" {
+			routeFilter = make(map[string]struct{})
+			for _, r := range strings.Split(v, ",") {
+				if r = strings.TrimSpace(r); r != "" {
+					routeFilter[r] = struct{}{}
+				}
+			}
+		}
+
+		log.Printf("[/api/arrivals/nearby] lat=%.6f lon=%.6f radius=%.0f routes=%v", lat, lon, radius, routeFilter)
 		now := time.Now()
 
 		result, err := nearbyService.Execute(r.Context(), lat, lon, radius)
@@ -55,7 +67,7 @@ func NearbyArrivalsGETHandler(nearbyService *service.NearbyArrivalsService) http
 			return
 		}
 
-		respStops := buildStopResponses(result.Stops, nil, now)
+		respStops := buildStopResponses(result.Stops, routeFilter, now)
 
 		log.Printf("[/api/arrivals/nearby] returning %d stops in %s", len(respStops), time.Since(now))
 		w.Header().Set("Content-Type", "application/json")
