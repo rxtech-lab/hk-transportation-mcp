@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -139,6 +140,7 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 			for n := range routeNames {
 				names = append(names, n)
 			}
+			sort.Strings(names)
 
 			displayURL := fmt.Sprintf("%s/api/arrivals/nearby?lat=%v&lon=%v&radius=%v", baseURL, lat, lon, radiusOrigin)
 			if len(names) > 0 {
