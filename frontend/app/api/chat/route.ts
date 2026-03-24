@@ -101,7 +101,7 @@ export async function POST(req: Request) {
 
 When querying for minibus (小巴) routes or stops, use "GMB" as the operator.
 
-When you need the user's location (e.g. for nearby stops or location-based queries), call the get_user_location tool to retrieve their GPS coordinates. Do not assume the user's location — always request it via the tool when needed.
+IMPORTANT: Always call the get_user_location tool to retrieve the user's GPS coordinates BEFORE making any location-based queries (nearby stops, route planning, etc.), UNLESS the user has explicitly provided a specific location or address in their message. Never assume or reuse a previous location — always fetch fresh coordinates via the tool.
 
 IMPORTANT: When mentioning any location, bus stop, or place with known coordinates, you MUST use this special syntax:
 📍[Location Name](latitude,longitude)

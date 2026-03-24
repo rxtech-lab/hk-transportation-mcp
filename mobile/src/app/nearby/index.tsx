@@ -8,6 +8,7 @@ import {
   StyleSheet,
   RefreshControl,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -134,7 +135,12 @@ export default function NearbyScreen() {
   );
 
   useEffect(() => {
-    geo.request().then(() => setLocationRequested(true));
+    // Get initial location, then start watching for updates
+    geo.request().then(() => {
+      setLocationRequested(true);
+      geo.startWatching();
+    });
+    return () => geo.stopWatching();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const renderItem = useCallback(
@@ -272,39 +278,40 @@ export default function NearbyScreen() {
 
   // Data loaded state
   return (
-    <SectionList
-      sections={sections}
-      keyExtractor={(item, index) => `${item.route}-${index}`}
-      renderItem={renderItem}
-      renderSectionHeader={renderSectionHeader}
-      stickySectionHeadersEnabled={false}
-      contentContainerStyle={[
-        styles.list,
-        { paddingTop: 0 },
-        sections.length === 0 && styles.emptyList,
-      ]}
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefreshing}
-          onRefresh={refetch}
-          tintColor="#007AFF"
-          progressViewOffset={0}
-        />
-      }
-      ListHeaderComponent={null}
-      ListEmptyComponent={
-        isLoading ? (
-          <ActivityIndicator size="large" color="#007AFF" />
-        ) : (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="bus-outline" size={48} color="#8E8E93" />
-            <Text style={[styles.statusText, { color: theme.textSecondary }]}>
-              {dict.nearby.empty}
-            </Text>
-          </View>
-        )
-      }
-    />
+    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+      <View style={{ height: 44 }} />
+      <SectionList
+        sections={sections}
+        keyExtractor={(item, index) => `${item.route}-${index}`}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        stickySectionHeadersEnabled={false}
+        contentContainerStyle={[
+          styles.list,
+          sections.length === 0 && styles.emptyList,
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={refetch}
+            tintColor="#007AFF"
+          />
+        }
+        ListHeaderComponent={null}
+        ListEmptyComponent={
+          isLoading ? (
+            <ActivityIndicator size="large" color="#007AFF" />
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="bus-outline" size={48} color="#8E8E93" />
+              <Text style={[styles.statusText, { color: theme.textSecondary }]}>
+                {dict.nearby.empty}
+              </Text>
+            </View>
+          )
+        }
+      />
+    </SafeAreaView>
   );
 }
 

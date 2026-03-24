@@ -56,8 +56,10 @@ export default function TransportLayout() {
             options={{
               presentation: "formSheet",
               headerShown: true,
+              headerTransparent: true,
               headerShadowVisible: false,
               title: "",
+              headerStyle: { backgroundColor: "transparent" },
               contentStyle: { backgroundColor: theme.backgroundSecondary },
             }}
           />

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import {
   View,
   Text,
@@ -22,6 +22,8 @@ import type {
   ArrivalData,
 } from "@/lib/types";
 import { getTrackedInfo } from "@/lib/live-activity";
+
+const DEFAULT_VISIBLE_ROWS = 5;
 
 function operatorBadgeColor(operator?: string): string {
   switch (operator) {
@@ -90,6 +92,13 @@ export function ArrivalCard({
   // Filter out stops with no arrivals
   const stopsWithArrivals =
     data.stops?.filter((s) => s.arrivals?.length > 0) ?? [];
+
+  // Count total arrival rows for expand/collapse
+  const totalRows = stopsWithArrivals.reduce(
+    (sum, s) => sum + s.arrivals.length,
+    0,
+  );
+  const canExpand = totalRows > DEFAULT_VISIBLE_ROWS;
 
   if (!stopsWithArrivals.length && !data.url) return null;
 
@@ -188,114 +197,165 @@ export function ArrivalCard({
       )}
 
       {/* Stop sections */}
-      {stopsWithArrivals.map((stop, i) => {
-        const localizedName = getStopName(stop);
-        return (
-          <View
-            key={i}
-            style={[
-              styles.stopSection,
-              i > 0 && [
-                styles.stopSeparator,
-                { borderTopColor: theme.separator },
-              ],
-            ]}
-          >
-            {/* Stop name */}
-            <Pressable
-              onPress={() =>
-                onLocationClick?.({
-                  name: localizedName,
-                  lat: stop.lat,
-                  lng: stop.lng,
-                })
-              }
-              style={({ pressed }) => [
-                styles.stopNameRow,
-                pressed && styles.stopNamePressed,
+      {(() => {
+        let rowsRendered = 0;
+        const limit = onHeaderPress ? DEFAULT_VISIBLE_ROWS : Infinity;
+        return stopsWithArrivals.map((stop, i) => {
+          if (rowsRendered >= limit) return null;
+          const remainingRows = limit - rowsRendered;
+          const visibleArrivals = stop.arrivals.slice(0, remainingRows);
+          rowsRendered += visibleArrivals.length;
+          const localizedName = getStopName(stop);
+          return (
+            <View
+              key={i}
+              style={[
+                styles.stopSection,
+                i > 0 && [
+                  styles.stopSeparator,
+                  { borderTopColor: theme.separator },
+                ],
               ]}
             >
-              <View style={styles.stopIcon}>
-                <Ionicons name="location" size={12} color="#007AFF" />
-              </View>
-              <Text style={styles.stopName} numberOfLines={1}>
-                {localizedName}
-              </Text>
-              <Ionicons
-                name="chevron-forward"
-                size={12}
-                color={theme.chevronColor}
-              />
-            </Pressable>
-
-            {/* Arrivals for this stop */}
-            {stop.arrivals.map((arrival, j) => {
-              const dest = getDestination(arrival);
-              const showDest =
-                dest &&
-                !["N/A", "Inbound", "Outbound", "-"].includes(dest.trim());
-
-              return (
-                <View
-                  key={j}
-                  style={[styles.arrivalItem, j > 0 && styles.arrivalSeparator]}
-                >
-                  {/* Route + destination row */}
-                  <View style={styles.routeRow}>
-                    <Pressable
-                      onPress={() => handleRouteBadgePress(stop, arrival)}
-                      style={({ pressed }) => [
-                        styles.routeBadge,
-                        { backgroundColor: operatorBadgeColor(arrival.operator) },
-                        trackedKey === `${arrival.route}:${stop.id}` &&
-                          styles.routeBadgeTracked,
-                        pressed && styles.routeBadgePressed,
-                      ]}
-                    >
-                      <Ionicons
-                        name={
-                          trackedKey === `${arrival.route}:${stop.id}`
-                            ? "radio"
-                            : "bus"
-                        }
-                        size={10}
-                        color="#fff"
-                      />
-                      <Text style={styles.routeNumber}>{arrival.route}</Text>
-                    </Pressable>
-                    {showDest && (
-                      <Text
-                        style={[
-                          styles.destination,
-                          { color: theme.textSecondary },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {dest}
-                      </Text>
-                    )}
-                  </View>
-
-                  {/* ETA pills */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.etaContainer}
-                  >
-                    {arrival.etas.map((eta, k) => (
-                      <EtaPill
-                        key={k}
-                        minutes={eta.minutes}
-                        remarks={eta.remarks}
-                      />
-                    ))}
-                  </ScrollView>
+              {/* Stop name */}
+              <Pressable
+                onPress={() =>
+                  onLocationClick?.({
+                    name: localizedName,
+                    lat: stop.lat,
+                    lng: stop.lng,
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.stopNameRow,
+                  pressed && styles.stopNamePressed,
+                ]}
+              >
+                <View style={styles.stopIcon}>
+                  <Ionicons name="location" size={12} color="#007AFF" />
                 </View>
-              );
-            })}
+                <Text style={styles.stopName} numberOfLines={1}>
+                  {localizedName}
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={12}
+                  color={theme.chevronColor}
+                />
+              </Pressable>
+
+              {/* Arrivals for this stop */}
+              {visibleArrivals.map((arrival, j) => {
+                const dest = getDestination(arrival);
+                const showDest =
+                  dest &&
+                  !["N/A", "Inbound", "Outbound", "-"].includes(dest.trim());
+
+                return (
+                  <View
+                    key={j}
+                    style={[
+                      styles.arrivalItem,
+                      j > 0 && styles.arrivalSeparator,
+                    ]}
+                  >
+                    {/* Route + destination row */}
+                    <View style={styles.routeRow}>
+                      <Pressable
+                        onPress={() => handleRouteBadgePress(stop, arrival)}
+                        style={({ pressed }) => [
+                          styles.routeBadge,
+                          {
+                            backgroundColor: operatorBadgeColor(
+                              arrival.operator,
+                            ),
+                          },
+                          trackedKey === `${arrival.route}:${stop.id}` &&
+                            styles.routeBadgeTracked,
+                          pressed && styles.routeBadgePressed,
+                        ]}
+                      >
+                        <Ionicons
+                          name={
+                            trackedKey === `${arrival.route}:${stop.id}`
+                              ? "radio"
+                              : "bus"
+                          }
+                          size={10}
+                          color="#fff"
+                        />
+                        <Text style={styles.routeNumber}>
+                          {arrival.route}
+                        </Text>
+                      </Pressable>
+                      {showDest && (
+                        <Text
+                          style={[
+                            styles.destination,
+                            { color: theme.textSecondary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {dest}
+                        </Text>
+                      )}
+                    </View>
+
+                    {/* ETA pills */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.etaContainer}
+                    >
+                      {arrival.etas.map((eta, k) => (
+                        <EtaPill
+                          key={k}
+                          minutes={eta.minutes}
+                          remarks={eta.remarks}
+                        />
+                      ))}
+                    </ScrollView>
+                  </View>
+                );
+              })}
+            </View>
+          );
+        });
+      })()}
+
+      {/* Fade overlay + tap to open sheet */}
+      {canExpand && onHeaderPress && (
+        <Pressable onPress={onHeaderPress} style={styles.fadeOverlay}>
+          {/* Simulated gradient with stacked opacity layers */}
+          <View
+            style={[
+              styles.fadeBand,
+              styles.fadeBandTop,
+              { backgroundColor: theme.cardBackground },
+            ]}
+          />
+          <View
+            style={[
+              styles.fadeBand,
+              styles.fadeBandMiddle,
+              { backgroundColor: theme.cardBackground },
+            ]}
+          />
+          <View
+            style={[
+              styles.fadeBand,
+              styles.fadeBandBottom,
+              { backgroundColor: theme.cardBackground },
+            ]}
+          />
+          <View style={styles.showMoreRow}>
+            <Ionicons name="chevron-down" size={14} color={theme.chevronColor} />
+            <Text style={[styles.expandLabel, { color: theme.chevronColor }]}>
+              Show all {totalRows} routes
+            </Text>
           </View>
-        );
-      })}
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -444,5 +504,45 @@ const styles = StyleSheet.create({
   etaContainer: {
     flexDirection: "row",
     gap: 6,
+  },
+
+  /* ── Fade overlay + show more ────────── */
+  fadeOverlay: {
+    height: 72,
+    marginTop: -48,
+    justifyContent: "flex-end",
+    alignItems: "center",
+    paddingBottom: 12,
+  },
+  fadeBand: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+  },
+  fadeBandTop: {
+    top: 0,
+    height: "33%",
+    opacity: 0.3,
+  },
+  fadeBandMiddle: {
+    top: "33%",
+    height: "33%",
+    opacity: 0.7,
+  },
+  fadeBandBottom: {
+    top: "66%",
+    height: "34%",
+    opacity: 1,
+  },
+  showMoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    zIndex: 1,
+  },
+  expandLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+    letterSpacing: -0.08,
   },
 });
