@@ -280,7 +280,7 @@ export default function NearbyScreen() {
       stickySectionHeadersEnabled={false}
       contentContainerStyle={[
         styles.list,
-        { paddingTop: insets.top + 52 },
+        { paddingTop: 0 },
         sections.length === 0 && styles.emptyList,
       ]}
       refreshControl={
@@ -288,7 +288,7 @@ export default function NearbyScreen() {
           refreshing={isRefreshing}
           onRefresh={refetch}
           tintColor="#007AFF"
-          progressViewOffset={insets.top + 52}
+          progressViewOffset={0}
         />
       }
       ListHeaderComponent={null}
