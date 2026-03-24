@@ -11,6 +11,7 @@ public struct TransitAttributes: ActivityAttributes {
     var stopName: String
     var stopId: String
     var destination: String
+    var operatorCode: String
 }
 
 public struct LiveEta: Codable, Hashable {

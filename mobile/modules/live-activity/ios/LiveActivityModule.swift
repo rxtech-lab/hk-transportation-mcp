@@ -14,6 +14,7 @@ fileprivate struct StartParams: Decodable {
   let stopName: String
   let stopId: String
   let destination: String
+  let operatorCode: String?
   let etas: [LiveEta]
 }
 
@@ -58,7 +59,8 @@ public class LiveActivityModule: Module {
         route: params.route,
         stopName: params.stopName,
         stopId: params.stopId,
-        destination: params.destination
+        destination: params.destination,
+        operatorCode: params.operatorCode ?? ""
       )
       let state = TransitAttributes.ContentState(
         etas: params.etas,

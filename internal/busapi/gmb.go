@@ -496,6 +496,7 @@ func (g *GMBClient) FetchETA(ctx context.Context, stopID, route string) ([]model
 	g.mu.RUnlock()
 
 	if len(gmbRouteIDs) == 0 {
+		log.Printf("gmb: no route IDs mapped for route code %q (routeCodeToIDs has %d entries)", route, len(g.routeCodeToIDs))
 		return []models.ETAArrival{}, nil
 	}
 

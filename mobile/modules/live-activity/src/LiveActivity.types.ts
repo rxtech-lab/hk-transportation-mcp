@@ -8,6 +8,7 @@ export type StartLiveActivityParams = {
   stopName: string;
   stopId: string;
   destination: string;
+  operatorCode?: string;
   etas: LiveEtaParam[];
 };
 

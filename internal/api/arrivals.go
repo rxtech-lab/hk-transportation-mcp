@@ -33,6 +33,7 @@ type arrivalResponse struct {
 	Destination string        `json:"destination"`
 	DestTc      string        `json:"dest_tc"`
 	DestSc      string        `json:"dest_sc"`
+	Operator    string        `json:"operator,omitempty"`
 	Etas        []etaResponse `json:"etas"`
 }
 
@@ -191,6 +192,7 @@ func buildStopResponses(matched []service.NearbyStopArrivals, routeFilter map[st
 					Destination: a.Destination,
 					DestTc:      a.DestTc,
 					DestSc:      a.DestSc,
+					Operator:    a.Operator,
 				}
 				if existing.Destination == "" {
 					existing.Destination = a.Direction

@@ -23,6 +23,17 @@ import type {
 } from "@/lib/types";
 import { getTrackedInfo } from "@/lib/live-activity";
 
+function operatorBadgeColor(operator?: string): string {
+  switch (operator) {
+    case "GMB":
+      return "#34C759";
+    case "KMB":
+      return "#CC0000";
+    default:
+      return "#007AFF";
+  }
+}
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], {
     hour: "2-digit",
@@ -69,6 +80,7 @@ export function ArrivalCard({
           route: arrival.route,
           stopId: stop.id,
           destination: dest,
+          operator: arrival.operator ?? "",
         },
       });
     },
@@ -234,6 +246,7 @@ export function ArrivalCard({
                       onPress={() => handleRouteBadgePress(stop, arrival)}
                       style={({ pressed }) => [
                         styles.routeBadge,
+                        { backgroundColor: operatorBadgeColor(arrival.operator) },
                         trackedKey === `${arrival.route}:${stop.id}` &&
                           styles.routeBadgeTracked,
                         pressed && styles.routeBadgePressed,

@@ -244,6 +244,50 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 		},
 	)
 
+	// stop_eta
+	s.AddTool(
+		mcp.NewTool("stop_eta",
+			mcp.WithDescription("Get real-time ETA (estimated time of arrival) for a specific bus/minibus stop and route. Use this when you know the exact stop ID and route number."),
+			mcp.WithString("stop_id",
+				mcp.Required(),
+				mcp.Description("The bus stop ID"),
+			),
+			mcp.WithString("route",
+				mcp.Required(),
+				mcp.Description("Route number (e.g., '1A', '960', '11')"),
+			),
+			mcp.WithString("operator",
+				mcp.Description("Operator code: 'KMB', 'CTB', or 'GMB'. If omitted, uses the operator associated with the stop."),
+			),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			stopID, err := req.RequireString("stop_id")
+			if err != nil {
+				return mcp.NewToolResultError("stop_id is required"), nil
+			}
+			route, err := req.RequireString("route")
+			if err != nil {
+				return mcp.NewToolResultError("route is required"), nil
+			}
+			operator := req.GetString("operator", "")
+
+			etas, err := nearby.FetchStopETA(ctx, stopID, route, operator)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+			}
+
+			data, err := json.Marshal(map[string]interface{}{
+				"stop_id":  stopID,
+				"route":    route,
+				"arrivals": etas,
+			})
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+			}
+			return mcp.NewToolResultText(string(data)), nil
+		},
+	)
+
 	// search_stops
 	s.AddTool(
 		mcp.NewTool("search_stops",

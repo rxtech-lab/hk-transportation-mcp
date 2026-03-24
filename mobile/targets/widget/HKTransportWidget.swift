@@ -44,6 +44,7 @@ private func toWidgetData(title: String, apiStops: [ArrivalsResponse.APIStop]) -
           WidgetArrival(
             route: arrival.route,
             destination: arrival.localizedDestination,
+            operatorCode: arrival.operator ?? "",
             etas: (arrival.etas ?? []).prefix(3).map { eta in
               WidgetEta(minutes: eta.minutes, remarks: eta.remarks ?? "")
             }
@@ -213,6 +214,14 @@ func etaText(_ minutes: Int) -> String {
   return "\(minutes)m"
 }
 
+func operatorColor(_ code: String) -> Color {
+  switch code {
+  case "GMB": return Color(red: 0.204, green: 0.780, blue: 0.349) // #34C759
+  case "KMB": return Color(red: 0.800, green: 0.0, blue: 0.0)     // #CC0000
+  default:    return Color.blue
+  }
+}
+
 // MARK: - Small Widget
 
 struct SmallWidgetView: View {
@@ -236,6 +245,7 @@ struct SmallWidgetView: View {
             Text(arrival.route)
               .font(.subheadline)
               .fontWeight(.bold)
+              .foregroundColor(operatorColor(arrival.operatorCode))
               .lineLimit(1)
               .frame(minWidth: 28, alignment: .leading)
 
@@ -320,6 +330,7 @@ struct MediumWidgetView: View {
               Text(arrival.route)
                 .font(.caption)
                 .fontWeight(.bold)
+                .foregroundColor(operatorColor(arrival.operatorCode))
                 .frame(minWidth: 32, alignment: .leading)
 
               Text(arrival.destination)
@@ -402,6 +413,7 @@ struct LargeWidgetView: View {
               Text(arrival.route)
                 .font(.subheadline)
                 .fontWeight(.bold)
+                .foregroundColor(operatorColor(arrival.operatorCode))
                 .frame(minWidth: 36, alignment: .leading)
 
               Text(arrival.destination)
