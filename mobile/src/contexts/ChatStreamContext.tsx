@@ -172,41 +172,29 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         });
       }
       if (toolCall.toolName === "get_user_location") {
-        const g = geoRef.current;
-        if (g.latitude && g.longitude) {
-          addToolOutput({
-            tool: "get_user_location" as never,
-            toolCallId: toolCall.toolCallId,
-            output: JSON.stringify({
-              latitude: g.latitude,
-              longitude: g.longitude,
-            }),
-          });
+        // Always fetch fresh location to ensure latest coordinates
+        geoRef.current.request().then((coords) => {
+          if (coords) {
+            addToolOutput({
+              tool: "get_user_location" as never,
+              toolCallId: toolCall.toolCallId,
+              output: JSON.stringify({
+                latitude: coords.latitude,
+                longitude: coords.longitude,
+              }),
+            });
+          } else {
+            addToolOutput({
+              tool: "get_user_location" as never,
+              toolCallId: toolCall.toolCallId,
+              output: JSON.stringify({
+                error:
+                  "Location unavailable. The user may have denied location permission.",
+              }),
+            });
+          }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } else {
-          geoRef.current.request().then((coords) => {
-            if (coords) {
-              addToolOutput({
-                tool: "get_user_location" as never,
-                toolCallId: toolCall.toolCallId,
-                output: JSON.stringify({
-                  latitude: coords.latitude,
-                  longitude: coords.longitude,
-                }),
-              });
-            } else {
-              addToolOutput({
-                tool: "get_user_location" as never,
-                toolCallId: toolCall.toolCallId,
-                output: JSON.stringify({
-                  error:
-                    "Location unavailable. The user may have denied location permission.",
-                }),
-              });
-            }
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          });
-        }
+        });
       }
     },
   });

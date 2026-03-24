@@ -1,5 +1,6 @@
 import { use } from "react";
 import { ScrollView, Pressable, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/use-theme";
@@ -14,10 +15,9 @@ export default function ArrivalsSheet() {
   if (!sheetData) return null;
 
   return (
-    <>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.backgroundSecondary }]} edges={["top"]}>
       <Stack.Screen
         options={{
-          title: "",
           headerRight: () => (
             <Pressable onPress={() => router.back()} hitSlop={8}>
               <Ionicons name="close" size={22} color={theme.textSecondary} />
@@ -26,7 +26,7 @@ export default function ArrivalsSheet() {
         }}
       />
       <ScrollView
-        style={[styles.container, { backgroundColor: theme.backgroundSecondary }]}
+        style={styles.container}
         contentContainerStyle={styles.content}
       >
         <ArrivalCard
@@ -37,7 +37,7 @@ export default function ArrivalsSheet() {
           isRefreshing={sheetData.isRefreshing}
         />
       </ScrollView>
-    </>
+    </SafeAreaView>
   );
 }
 
@@ -46,7 +46,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingTop: 12,
     paddingHorizontal: 16,
     paddingBottom: 32,
   },

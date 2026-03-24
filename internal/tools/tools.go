@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"sort"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -121,11 +124,34 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 			}
+			// Collect unique route names from candidate and transfer routes
+			routeNames := make(map[string]struct{})
+			for _, cr := range result.CandidateRoutes {
+				routeNames[cr.RouteName] = struct{}{}
+			}
+			for _, tr := range result.TransferRoutes {
+				for _, leg := range tr.Legs {
+					if !leg.IsWalking && leg.RouteName != "" {
+						routeNames[leg.RouteName] = struct{}{}
+					}
+				}
+			}
+			var routeList []string
+			for name := range routeNames {
+				routeList = append(routeList, name)
+			}
+			sort.Strings(routeList)
+			routesParam := url.QueryEscape(strings.Join(routeList, ","))
+
 			// Wrap result with display_url for frontend direct fetch
+			displayURL := fmt.Sprintf("%s/api/arrivals/nearby?lat=%v&lon=%v&radius=%v", baseURL, lat, lon, radiusOrigin)
+			if routesParam != "" {
+				displayURL += "&routes=" + routesParam
+			}
 			wrapped := map[string]interface{}{
 				"candidate_routes": result.CandidateRoutes,
 				"transfer_routes":  result.TransferRoutes,
-				"display_url":      fmt.Sprintf("%s/api/arrivals/nearby?lat=%v&lon=%v&radius=%v", baseURL, lat, lon, radiusOrigin),
+				"display_url":      displayURL,
 			}
 			data, err := json.Marshal(wrapped)
 			if err != nil {

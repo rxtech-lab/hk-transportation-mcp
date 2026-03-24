@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Linking, Platform } from "react-native";
 import * as Location from "expo-location";
 
@@ -20,6 +20,7 @@ export function useGeolocation() {
   });
 
   const inflightRef = useRef<Promise<{ latitude: number; longitude: number } | null> | null>(null);
+  const watchRef = useRef<Location.LocationSubscription | null>(null);
 
   const request = useCallback(async () => {
     // Deduplicate concurrent requests
@@ -65,6 +66,49 @@ export function useGeolocation() {
     return promise;
   }, []);
 
+  const startWatching = useCallback(async () => {
+    if (watchRef.current) return;
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      setState((prev) => ({
+        ...prev,
+        error: "Location permission denied",
+        permissionDenied: true,
+      }));
+      return;
+    }
+
+    watchRef.current = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.Balanced,
+        distanceInterval: 50,
+      },
+      (location) => {
+        setState({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          loading: false,
+          error: null,
+          permissionDenied: false,
+        });
+      },
+    );
+  }, []);
+
+  const stopWatching = useCallback(() => {
+    watchRef.current?.remove();
+    watchRef.current = null;
+  }, []);
+
+  // Clean up watcher on unmount
+  useEffect(() => {
+    return () => {
+      watchRef.current?.remove();
+      watchRef.current = null;
+    };
+  }, []);
+
   const openSettings = useCallback(() => {
     if (Platform.OS === "ios") {
       Linking.openURL("app-settings:");
@@ -73,5 +117,5 @@ export function useGeolocation() {
     }
   }, []);
 
-  return { ...state, request, openSettings };
+  return { ...state, request, startWatching, stopWatching, openSettings };
 }

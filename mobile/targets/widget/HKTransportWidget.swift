@@ -326,32 +326,9 @@ struct MediumWidgetView: View {
             .lineLimit(1)
 
           ForEach(Array(item.stop.arrivals.prefix(item.arrivalCount).enumerated()), id: \.offset) { _, arrival in
-            HStack(spacing: 4) {
-              Text(arrival.route)
-                .font(.caption)
-                .fontWeight(.bold)
-                .foregroundColor(operatorColor(arrival.operatorCode))
-                .frame(minWidth: 32, alignment: .leading)
-
-              Text(arrival.destination)
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-
-              Spacer()
-
-              HStack(spacing: 3) {
-                ForEach(Array(arrival.etas.prefix(3).enumerated()), id: \.offset) { _, eta in
-                  Text(etaText(eta.minutes))
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(etaColor(eta.minutes))
-                    .cornerRadius(4)
-                }
-              }
+            ViewThatFits(in: .horizontal) {
+              mediumArrivalRow(arrival: arrival, etaCount: 3)
+              mediumArrivalRow(arrival: arrival, etaCount: 2)
             }
           }
         }
@@ -409,32 +386,9 @@ struct LargeWidgetView: View {
             .lineLimit(1)
 
           ForEach(Array(item.stop.arrivals.prefix(item.arrivalCount).enumerated()), id: \.offset) { _, arrival in
-            HStack(spacing: 6) {
-              Text(arrival.route)
-                .font(.subheadline)
-                .fontWeight(.bold)
-                .foregroundColor(operatorColor(arrival.operatorCode))
-                .frame(minWidth: 36, alignment: .leading)
-
-              Text(arrival.destination)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-
-              Spacer()
-
-              HStack(spacing: 3) {
-                ForEach(Array(arrival.etas.prefix(3).enumerated()), id: \.offset) { _, eta in
-                  Text(etaText(eta.minutes))
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(etaColor(eta.minutes))
-                    .cornerRadius(5)
-                }
-              }
+            ViewThatFits(in: .horizontal) {
+              largeArrivalRow(arrival: arrival, etaCount: 3)
+              largeArrivalRow(arrival: arrival, etaCount: 2)
             }
           }
         }
@@ -456,6 +410,70 @@ struct LargeWidgetView: View {
         Spacer()
       }
       .padding()
+    }
+  }
+}
+
+// MARK: - Arrival row helpers
+
+@ViewBuilder
+private func mediumArrivalRow(arrival: WidgetArrival, etaCount: Int) -> some View {
+  HStack(spacing: 4) {
+    Text(arrival.route)
+      .font(.caption)
+      .fontWeight(.bold)
+      .foregroundColor(operatorColor(arrival.operatorCode))
+      .frame(minWidth: 32, alignment: .leading)
+
+    Text(arrival.destination)
+      .font(.caption2)
+      .foregroundColor(.secondary)
+      .lineLimit(1)
+
+    Spacer()
+
+    HStack(spacing: 3) {
+      ForEach(Array(arrival.etas.prefix(etaCount).enumerated()), id: \.offset) { _, eta in
+        Text(etaText(eta.minutes))
+          .font(.caption2)
+          .fontWeight(.semibold)
+          .foregroundColor(.white)
+          .padding(.horizontal, 5)
+          .padding(.vertical, 2)
+          .background(etaColor(eta.minutes))
+          .cornerRadius(4)
+      }
+    }
+  }
+}
+
+@ViewBuilder
+private func largeArrivalRow(arrival: WidgetArrival, etaCount: Int) -> some View {
+  HStack(spacing: 6) {
+    Text(arrival.route)
+      .font(.subheadline)
+      .fontWeight(.bold)
+      .foregroundColor(operatorColor(arrival.operatorCode))
+      .frame(minWidth: 36, alignment: .leading)
+
+    Text(arrival.destination)
+      .font(.caption)
+      .foregroundColor(.secondary)
+      .lineLimit(1)
+
+    Spacer()
+
+    HStack(spacing: 3) {
+      ForEach(Array(arrival.etas.prefix(etaCount).enumerated()), id: \.offset) { _, eta in
+        Text(etaText(eta.minutes))
+          .font(.caption)
+          .fontWeight(.semibold)
+          .foregroundColor(.white)
+          .padding(.horizontal, 6)
+          .padding(.vertical, 3)
+          .background(etaColor(eta.minutes))
+          .cornerRadius(5)
+      }
     }
   }
 }
