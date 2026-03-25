@@ -174,11 +174,12 @@ export default function RouteDetailScreen() {
       setTrackedKey(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } else {
+      const currentStop = stops.find((s) => s.id === currentStopId);
       const ok = await startTracking({
         route: params.route,
-        stopName: params.stopId,
+        stopName: currentStop ? getStopName(currentStop) : params.stopId,
         stopId: params.stopId,
-        destination: params.destination ?? "",
+        destination: localizedDestination ?? params.destination ?? "",
         operator: params.operator ?? "",
         etas: [],
       });
@@ -187,7 +188,7 @@ export default function RouteDetailScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     }
-  }, [isTracked, params, currentKey]);
+  }, [isTracked, params, currentKey, stops, currentStopId, getStopName, localizedDestination]);
 
   const handleCurrentStopLayout = useCallback((y: number) => {
     if (hasScrolledRef.current) return;
