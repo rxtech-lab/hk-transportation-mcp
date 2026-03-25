@@ -155,6 +155,7 @@ func main() {
 	}
 	mux.HandleFunc("/api/arrivals", api.ArrivalsHandler(nearbyService))
 	mux.HandleFunc("/api/arrivals/nearby", api.NearbyArrivalsGETHandler(nearbyService))
+	mux.HandleFunc("/api/arrivals/route", api.RouteArrivalsGETHandler(routeService))
 	mux.HandleFunc("/api/route-stops", api.RouteStopsHandler(index))
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
