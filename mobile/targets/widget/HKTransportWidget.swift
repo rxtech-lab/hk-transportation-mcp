@@ -438,6 +438,7 @@ private func mediumArrivalRow(arrival: WidgetArrival, etaCount: Int) -> some Vie
           .font(.caption2)
           .fontWeight(.semibold)
           .foregroundColor(.white)
+          .lineLimit(1)
           .padding(.horizontal, 5)
           .padding(.vertical, 2)
           .background(etaColor(eta.minutes))
@@ -469,6 +470,7 @@ private func largeArrivalRow(arrival: WidgetArrival, etaCount: Int) -> some View
           .font(.caption)
           .fontWeight(.semibold)
           .foregroundColor(.white)
+          .lineLimit(1)
           .padding(.horizontal, 6)
           .padding(.vertical, 3)
           .background(etaColor(eta.minutes))
@@ -531,4 +533,65 @@ struct WidgetFamilyView: View {
       MediumWidgetView(entry: entry)
     }
   }
+}
+
+// MARK: - Preview
+
+private let previewData = WidgetArrivalsData(
+  title: "往銅鑼灣巴士/小巴班次",
+  stops: [
+    WidgetStop(name: "HING WO STREET", arrivals: [
+      WidgetArrival(route: "107", destination: "KOWLOON BAY", operatorCode: "KMB", etas: [
+        WidgetEta(minutes: 1, remarks: ""),
+        WidgetEta(minutes: 26, remarks: ""),
+        WidgetEta(minutes: 36, remarks: ""),
+      ]),
+      WidgetArrival(route: "107P", destination: "LAGUNA VERDE", operatorCode: "KMB", etas: [
+        WidgetEta(minutes: 0, remarks: ""),
+      ]),
+      WidgetArrival(route: "170", destination: "SHATIN STATION", operatorCode: "KMB", etas: [
+        WidgetEta(minutes: 19, remarks: ""),
+        WidgetEta(minutes: 49, remarks: ""),
+      ]),
+      WidgetArrival(route: "37A", destination: "Central Market", operatorCode: "GMB", etas: [
+        WidgetEta(minutes: 10, remarks: ""),
+        WidgetEta(minutes: 26, remarks: ""),
+        WidgetEta(minutes: 41, remarks: ""),
+      ]),
+      WidgetArrival(route: "38", destination: "North Point Ferry Pier", operatorCode: "GMB", etas: [
+        WidgetEta(minutes: 4, remarks: ""),
+        WidgetEta(minutes: 11, remarks: ""),
+      ]),
+      WidgetArrival(route: "41A", destination: "North Point Ferry Pier", operatorCode: "GMB", etas: [
+        WidgetEta(minutes: 23, remarks: ""),
+        WidgetEta(minutes: 49, remarks: ""),
+      ]),
+      WidgetArrival(route: "51", destination: "Aberdeen (Circular)", operatorCode: "GMB", etas: [
+        WidgetEta(minutes: 2, remarks: ""),
+        WidgetEta(minutes: 2, remarks: ""),
+        WidgetEta(minutes: 5, remarks: ""),
+      ]),
+    ]),
+  ],
+  updatedAt: Date().timeIntervalSince1970 * 1000
+)
+
+private let previewEntry = ArrivalsEntry(date: Date(), data: previewData, status: .loaded)
+
+#Preview("Small", as: .systemSmall) {
+  HKTransportWidget()
+} timeline: {
+  previewEntry
+}
+
+#Preview("Medium", as: .systemMedium) {
+  HKTransportWidget()
+} timeline: {
+  previewEntry
+}
+
+#Preview("Large", as: .systemLarge) {
+  HKTransportWidget()
+} timeline: {
+  previewEntry
 }
