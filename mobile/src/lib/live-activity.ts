@@ -70,7 +70,8 @@ export async function startTracking(params: {
       () => {},
     );
 
-    // Start periodic refresh every 30 seconds
+    // Fetch real ETAs immediately, then refresh every 30 seconds
+    refreshActivity();
     refreshTimer = setInterval(refreshActivity, 30_000);
     return true;
   } catch (e) {
