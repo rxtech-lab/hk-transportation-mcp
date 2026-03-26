@@ -193,6 +193,175 @@ func (s *NearbyArrivalsService) fetchETACached(ctx context.Context, stop models.
 	return nil
 }
 
+// ExecuteForRoute finds nearby stops serving a specific route and fetches ETAs
+// only for that route. More efficient than Execute when the user asks about a
+// specific bus route (e.g. "when is the next 170?").
+// If destLat/destLon are non-zero, the method determines which direction of the
+// route goes towards that destination by comparing terminus stops, then only
+// includes stops on that bound.
+func (s *NearbyArrivalsService) ExecuteForRoute(ctx context.Context, lat, lon, radiusM float64, routeName string, destLat, destLon float64) (*NearbyArrivalsResult, error) {
+	// If destination coordinates are provided, resolve to specific route IDs
+	// by finding which variant's terminus is closest to the destination.
+	var allowedRouteIDs map[string]struct{}
+	if destLat != 0 || destLon != 0 {
+		routes, err := s.index.GetRoutesByName(routeName, "")
+		if err == nil && len(routes) > 0 {
+			// For each route variant, find its last stop and compute distance
+			// to the destination. Pick the variant(s) whose terminus is closest.
+			type candidate struct {
+				routeID  string
+				distance float64
+			}
+			var candidates []candidate
+			for _, r := range routes {
+				stops := s.index.StopsForRoute(r.RouteID)
+				if len(stops) == 0 {
+					continue
+				}
+				lastStop := stops[len(stops)-1]
+				if stop, ok := s.index.GetStop(lastStop.StopID); ok {
+					dist := geo.HaversineMetres(destLat, destLon, stop.Lat, stop.Lon)
+					candidates = append(candidates, candidate{routeID: r.RouteID, distance: dist})
+				}
+			}
+			if len(candidates) > 0 {
+				// Find minimum distance
+				sort.Slice(candidates, func(i, j int) bool {
+					return candidates[i].distance < candidates[j].distance
+				})
+				bestDist := candidates[0].distance
+				allowedRouteIDs = make(map[string]struct{})
+				for _, c := range candidates {
+					// Include all variants within 500m of the best match
+					// (handles multiple service types for same direction)
+					if c.distance <= bestDist+500 {
+						allowedRouteIDs[c.routeID] = struct{}{}
+					}
+				}
+				log.Printf("[route-nearby] dest (%.6f,%.6f) matched %d route IDs (best terminus %.0fm away)", destLat, destLon, len(allowedRouteIDs), bestDist)
+			}
+		}
+	}
+
+	// Extract allowed bounds (directions) from allowed route IDs for ETA filtering.
+	// Route IDs encode bound: "KMB-77-O-1" → bound "O", "GMB-NT-77-O-1" → bound "O"
+	var allowedBounds map[string]struct{}
+	if allowedRouteIDs != nil {
+		allowedBounds = make(map[string]struct{})
+		for rid := range allowedRouteIDs {
+			parts := splitRouteID(rid)
+			// GMB: GMB-REGION-ROUTE-BOUND-SERVICETYPE → parts[3]
+			// KMB: KMB-ROUTE-BOUND-SERVICETYPE → parts[2]
+			// CTB: CTB-ROUTE-BOUND → parts[2]
+			if len(parts) >= 5 && parts[0] == "GMB" {
+				allowedBounds[parts[3]] = struct{}{}
+			} else if len(parts) >= 3 {
+				allowedBounds[parts[2]] = struct{}{}
+			}
+		}
+		log.Printf("[route-nearby] allowed bounds: %v", allowedBounds)
+	}
+
+	nearbyStops := s.index.FindNearby(lat, lon, radiusM)
+	log.Printf("[route-nearby] found %d stops within %.0fm of (%.6f, %.6f) for route %s", len(nearbyStops), radiusM, lat, lon, routeName)
+	if len(nearbyStops) == 0 {
+		return &NearbyArrivalsResult{Stops: []NearbyStopArrivals{}}, nil
+	}
+
+	var (
+		mu      sync.Mutex
+		results []NearbyStopArrivals
+		wg      sync.WaitGroup
+	)
+
+	for _, stop := range nearbyStops {
+		wg.Add(1)
+		go func(stop models.BusStop) {
+			defer wg.Done()
+
+			// Check if this stop serves the requested route (and correct direction)
+			routeIDs := s.index.RoutesForStop(stop.StopID)
+			servesRoute := false
+			for _, rid := range routeIDs {
+				if extractRouteName(rid) != routeName {
+					continue
+				}
+				// If we have allowed route IDs (direction filter), check against them
+				if allowedRouteIDs != nil {
+					if _, ok := allowedRouteIDs[rid]; !ok {
+						continue
+					}
+				}
+				servesRoute = true
+				break
+			}
+			if !servesRoute {
+				return
+			}
+
+			// Fetch ETAs only for the requested route
+			allETAs := s.fetchETACached(ctx, stop, routeName)
+			if len(allETAs) == 0 {
+				return
+			}
+
+			// Filter ETAs by allowed direction if we have destination filtering
+			var arrivals []models.ETAArrival
+			if allowedBounds != nil {
+				for _, a := range allETAs {
+					if _, ok := allowedBounds[a.Direction]; ok {
+						arrivals = append(arrivals, a)
+					}
+				}
+			} else {
+				arrivals = allETAs
+			}
+			if len(arrivals) == 0 {
+				return
+			}
+
+			// Sort by ETA time
+			sort.Slice(arrivals, func(i, j int) bool {
+				if arrivals[i].ETA == nil {
+					return false
+				}
+				if arrivals[j].ETA == nil {
+					return true
+				}
+				return arrivals[i].ETA.Before(*arrivals[j].ETA)
+			})
+
+			mu.Lock()
+			results = append(results, NearbyStopArrivals{
+				StopID:   stop.StopID,
+				StopName: stop.NameEn,
+				NameEn:   stop.NameEn,
+				NameTc:   stop.NameTc,
+				NameSc:   stop.NameSc,
+				Lat:      stop.Lat,
+				Lon:      stop.Lon,
+				Distance: geo.HaversineMetres(lat, lon, stop.Lat, stop.Lon),
+				Arrivals: arrivals,
+			})
+			mu.Unlock()
+		}(stop)
+	}
+
+	wg.Wait()
+
+	// Sort stops by distance from query point
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Distance < results[j].Distance
+	})
+
+	log.Printf("[route-nearby] %d stops serve route %s out of %d nearby", len(results), routeName, len(nearbyStops))
+
+	// Group nearby stops from different operators into a single entry
+	results = groupNearbyStops(results)
+
+	return &NearbyArrivalsResult{Stops: results}, nil
+}
+
 // ExecuteByStopID fetches ETAs for a single stop looked up by its ID.
 func (s *NearbyArrivalsService) ExecuteByStopID(ctx context.Context, stopID string) (*NearbyStopArrivals, error) {
 	stop, ok := s.index.GetStop(stopID)

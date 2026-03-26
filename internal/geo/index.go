@@ -240,11 +240,11 @@ func (idx *StopIndex) GetRoutesByName(routeName, operator string) ([]models.Rout
 	var err error
 	if operator != "" {
 		rows, err = idx.db.Query(
-			`SELECT route_id, route, bound, service_type, orig_en, dest_en, operator
+			`SELECT route_id, route, bound, service_type, orig_en, dest_en, COALESCE(dest_tc,''), COALESCE(dest_sc,''), operator
 			 FROM routes WHERE route = $1 AND operator = $2`, routeName, operator)
 	} else {
 		rows, err = idx.db.Query(
-			`SELECT route_id, route, bound, service_type, orig_en, dest_en, operator
+			`SELECT route_id, route, bound, service_type, orig_en, dest_en, COALESCE(dest_tc,''), COALESCE(dest_sc,''), operator
 			 FROM routes WHERE route = $1`, routeName)
 	}
 	if err != nil {
@@ -255,7 +255,7 @@ func (idx *StopIndex) GetRoutesByName(routeName, operator string) ([]models.Rout
 	var result []models.Route
 	for rows.Next() {
 		var r models.Route
-		if err := rows.Scan(&r.RouteID, &r.Route, &r.Bound, &r.ServiceType, &r.OrigEn, &r.DestEn, &r.Operator); err != nil {
+		if err := rows.Scan(&r.RouteID, &r.Route, &r.Bound, &r.ServiceType, &r.OrigEn, &r.DestEn, &r.DestTc, &r.DestSc, &r.Operator); err != nil {
 			continue
 		}
 		result = append(result, r)

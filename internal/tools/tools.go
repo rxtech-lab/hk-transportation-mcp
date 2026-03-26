@@ -63,6 +63,80 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 		},
 	)
 
+	// route_nearby_arrivals
+	s.AddTool(
+		mcp.NewTool("route_nearby_arrivals",
+			mcp.WithDescription("Find nearby bus stops serving a specific route and get real-time arrival times for that route. Use this when the user asks about a specific bus route near their location (e.g., 'when is the next 170 bus?'). If the user specifies a destination/direction (e.g., '77 to Causeway Bay'), pass the destination name — the tool will geocode it and filter to the correct direction automatically."),
+			mcp.WithNumber("latitude",
+				mcp.Required(),
+				mcp.Description("Latitude of the user's location (WGS84)"),
+			),
+			mcp.WithNumber("longitude",
+				mcp.Required(),
+				mcp.Description("Longitude of the user's location (WGS84)"),
+			),
+			mcp.WithString("route_number",
+				mcp.Required(),
+				mcp.Description("Bus route number (e.g., '170', '1A', '960', 'N969')"),
+			),
+			mcp.WithString("destination",
+				mcp.Description("Destination or direction name to filter by (e.g., 'Causeway Bay', '銅鑼灣'). The tool geocodes this to coordinates and determines the correct route direction automatically."),
+			),
+			mcp.WithString("operator",
+				mcp.Description("Filter by operator: 'KMB', 'CTB', 'GMB'"),
+			),
+			mcp.WithNumber("radius",
+				mcp.Description("Search radius in meters (default: 300)"),
+				mcp.DefaultNumber(300),
+			),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			lat, err := req.RequireFloat("latitude")
+			if err != nil {
+				return mcp.NewToolResultError("latitude is required"), nil
+			}
+			lon, err := req.RequireFloat("longitude")
+			if err != nil {
+				return mcp.NewToolResultError("longitude is required"), nil
+			}
+			routeNumber, err := req.RequireString("route_number")
+			if err != nil {
+				return mcp.NewToolResultError("route_number is required"), nil
+			}
+			radius := req.GetFloat("radius", 300)
+			destination := req.GetString("destination", "")
+
+			// Geocode destination to coordinates if provided
+			var destLat, destLon float64
+			if destination != "" {
+				locResult, err := search.Execute(ctx, destination, 1)
+				if err == nil && len(locResult.Locations) > 0 {
+					destLat = locResult.Locations[0].Lat
+					destLon = locResult.Locations[0].Lon
+				}
+			}
+
+			result, err := nearby.ExecuteForRoute(ctx, lat, lon, radius, routeNumber, destLat, destLon)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+			}
+			// Wrap result with display_url for frontend direct fetch
+			displayURL := fmt.Sprintf("%s/api/arrivals/nearby?lat=%v&lon=%v&radius=%v&routes=%s", baseURL, lat, lon, radius, routeNumber)
+			if destLat != 0 || destLon != 0 {
+				displayURL += fmt.Sprintf("&dest_lat=%v&dest_lon=%v", destLat, destLon)
+			}
+			wrapped := map[string]interface{}{
+				"stops":       result.Stops,
+				"display_url": displayURL,
+			}
+			data, err := json.Marshal(wrapped)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+			}
+			return mcp.NewToolResultText(string(data)), nil
+		},
+	)
+
 	// route_arrivals
 	s.AddTool(
 		mcp.NewTool("route_arrivals",
