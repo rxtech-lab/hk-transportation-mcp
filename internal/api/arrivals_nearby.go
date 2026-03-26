@@ -59,14 +59,44 @@ func NearbyArrivalsGETHandler(nearbyService *service.NearbyArrivalsService) http
 			}
 		}
 
+		// Optional destination coordinates for direction filtering
+		var destLat, destLon float64
+		if v := q.Get("dest_lat"); v != "" {
+			if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+				destLat = parsed
+			}
+		}
+		if v := q.Get("dest_lon"); v != "" {
+			if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+				destLon = parsed
+			}
+		}
+
 		log.Printf("[/api/arrivals/nearby] lat=%.6f lon=%.6f radius=%.0f", lat, lon, radius)
 		now := time.Now()
 
-		result, err := nearbyService.Execute(r.Context(), lat, lon, radius)
-		if err != nil {
-			log.Printf("[/api/arrivals/nearby] Execute error: %v", err)
-			http.Error(w, `{"error":"failed to fetch arrivals"}`, http.StatusInternalServerError)
-			return
+		var result *service.NearbyArrivalsResult
+		// Use optimised path when filtering by a single route
+		if routeFilter != nil && len(routeFilter) == 1 {
+			var routeName string
+			for r := range routeFilter {
+				routeName = r
+			}
+			res, err2 := nearbyService.ExecuteForRoute(r.Context(), lat, lon, radius, routeName, destLat, destLon)
+			if err2 != nil {
+				log.Printf("[/api/arrivals/nearby] ExecuteForRoute error: %v", err2)
+				http.Error(w, `{"error":"failed to fetch arrivals"}`, http.StatusInternalServerError)
+				return
+			}
+			result = res
+		} else {
+			res, err2 := nearbyService.Execute(r.Context(), lat, lon, radius)
+			if err2 != nil {
+				log.Printf("[/api/arrivals/nearby] Execute error: %v", err2)
+				http.Error(w, `{"error":"failed to fetch arrivals"}`, http.StatusInternalServerError)
+				return
+			}
+			result = res
 		}
 
 		respStops := buildStopResponses(result.Stops, routeFilter, now)

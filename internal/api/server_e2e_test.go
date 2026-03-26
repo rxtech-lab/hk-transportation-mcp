@@ -232,6 +232,212 @@ func TestStopETA_E2E(t *testing.T) {
 	}
 }
 
+// TestRouteNearbyArrivals_E2E tests the route_nearby_arrivals MCP tool and the
+// GET /api/arrivals/nearby?routes=X&dest_lat=Y&dest_lon=Z endpoint.
+// Verifies that direction filtering works correctly for CTB route 77.
+func TestRouteNearbyArrivals_E2E(t *testing.T) {
+	// Tin Wan area – route 77 runs here (CTB)
+	lat, lon := 22.249225, 114.1489247492537
+
+	// Test 1: MCP route_nearby_arrivals without destination (both directions)
+	t.Run("mcp_no_destination", func(t *testing.T) {
+		result := mcpCallWithDelay(t, "route_nearby_arrivals", map[string]any{
+			"latitude":     lat,
+			"longitude":    lon,
+			"route_number": "77",
+			"radius":       300,
+		})
+
+		var data struct {
+			Stops []struct {
+				StopID   string `json:"stop_id"`
+				StopName string `json:"stop_name"`
+				Arrivals []struct {
+					Route       string `json:"route"`
+					Direction   string `json:"direction"`
+					Destination string `json:"destination"`
+					Operator    string `json:"operator"`
+				} `json:"arrivals"`
+			} `json:"stops"`
+			DisplayURL string `json:"display_url"`
+		}
+		if err := json.Unmarshal(result, &data); err != nil {
+			t.Fatalf("decode route_nearby_arrivals: %v", err)
+		}
+
+		t.Logf("MCP route_nearby_arrivals (no dest): %d stops, display_url=%s", len(data.Stops), data.DisplayURL)
+		if len(data.Stops) == 0 {
+			t.Fatal("route_nearby_arrivals returned 0 stops")
+		}
+		if data.DisplayURL == "" {
+			t.Error("display_url is empty")
+		}
+
+		// Should return arrivals for both directions
+		directions := map[string]bool{}
+		for _, s := range data.Stops {
+			for _, a := range s.Arrivals {
+				t.Logf("  Stop %s: route=%s dir=%s dest=%s", s.StopID, a.Route, a.Direction, a.Destination)
+				if a.Route != "77" {
+					t.Errorf("unexpected route %s, want 77", a.Route)
+				}
+				directions[a.Direction] = true
+			}
+		}
+		t.Logf("Directions found (no filter): %v", directions)
+	})
+
+	// Test 2: MCP route_nearby_arrivals with destination (direction filter)
+	t.Run("mcp_with_destination", func(t *testing.T) {
+		result := mcpCallWithDelay(t, "route_nearby_arrivals", map[string]any{
+			"latitude":     lat,
+			"longitude":    lon,
+			"route_number": "77",
+			"destination":  "Causeway Bay",
+			"radius":       300,
+		})
+
+		var data struct {
+			Stops []struct {
+				StopID   string `json:"stop_id"`
+				StopName string `json:"stop_name"`
+				Arrivals []struct {
+					Route       string `json:"route"`
+					Direction   string `json:"direction"`
+					Destination string `json:"destination"`
+					Operator    string `json:"operator"`
+				} `json:"arrivals"`
+			} `json:"stops"`
+			DisplayURL string `json:"display_url"`
+		}
+		if err := json.Unmarshal(result, &data); err != nil {
+			t.Fatalf("decode route_nearby_arrivals: %v", err)
+		}
+
+		t.Logf("MCP route_nearby_arrivals (dest=Causeway Bay): %d stops, display_url=%s", len(data.Stops), data.DisplayURL)
+		if len(data.Stops) == 0 {
+			t.Fatal("route_nearby_arrivals with destination returned 0 stops")
+		}
+		if data.DisplayURL == "" {
+			t.Error("display_url is empty")
+		}
+
+		// All arrivals should be in the same direction (towards Shau Kei Wan / Causeway Bay = outbound "O")
+		directions := map[string]bool{}
+		for _, s := range data.Stops {
+			for _, a := range s.Arrivals {
+				t.Logf("  Stop %s: route=%s dir=%s dest=%s", s.StopID, a.Route, a.Direction, a.Destination)
+				if a.Route != "77" {
+					t.Errorf("unexpected route %s, want 77", a.Route)
+				}
+				directions[a.Direction] = true
+			}
+		}
+		if len(directions) > 1 {
+			t.Errorf("expected single direction with destination filter, got %v", directions)
+		}
+		t.Logf("Directions found (with dest filter): %v", directions)
+	})
+
+	// Test 3: HTTP GET /api/arrivals/nearby with route + dest params
+	t.Run("http_with_dest_params", func(t *testing.T) {
+		time.Sleep(1100 * time.Millisecond)
+		url := fmt.Sprintf("%s/api/arrivals/nearby?lat=%v&lon=%v&radius=300&routes=77&dest_lat=22.2820777&dest_lon=114.1891587", baseURL, lat, lon)
+		resp, err := http.Get(url)
+		if err != nil {
+			t.Fatalf("GET failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("returned %d: %s", resp.StatusCode, string(body))
+		}
+
+		var data struct {
+			Stops []struct {
+				ID       string `json:"id"`
+				Name     string `json:"name"`
+				Arrivals []struct {
+					Route       string `json:"route"`
+					Destination string `json:"destination"`
+					Operator    string `json:"operator"`
+				} `json:"arrivals"`
+			} `json:"stops"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+
+		t.Logf("HTTP /api/arrivals/nearby (route=77, dest): %d stops", len(data.Stops))
+		if len(data.Stops) == 0 {
+			t.Fatal("HTTP endpoint returned 0 stops with dest filter")
+		}
+
+		// All arrivals should have the same destination (same direction)
+		destinations := map[string]bool{}
+		for _, s := range data.Stops {
+			for _, a := range s.Arrivals {
+				t.Logf("  Stop %s: route=%s dest=%s", s.ID, a.Route, a.Destination)
+				if a.Route != "77" {
+					t.Errorf("unexpected route %s, want 77", a.Route)
+				}
+				destinations[a.Destination] = true
+			}
+		}
+		if len(destinations) > 1 {
+			t.Errorf("expected single destination with direction filter, got %v", destinations)
+		}
+		t.Logf("Destinations found: %v", destinations)
+	})
+
+	// Test 4: HTTP GET without dest params returns both directions
+	t.Run("http_without_dest_params", func(t *testing.T) {
+		time.Sleep(1100 * time.Millisecond)
+		url := fmt.Sprintf("%s/api/arrivals/nearby?lat=%v&lon=%v&radius=300&routes=77", baseURL, lat, lon)
+		resp, err := http.Get(url)
+		if err != nil {
+			t.Fatalf("GET failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("returned %d: %s", resp.StatusCode, string(body))
+		}
+
+		var data struct {
+			Stops []struct {
+				ID       string `json:"id"`
+				Arrivals []struct {
+					Route       string `json:"route"`
+					Destination string `json:"destination"`
+				} `json:"arrivals"`
+			} `json:"stops"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+
+		t.Logf("HTTP /api/arrivals/nearby (route=77, no dest): %d stops", len(data.Stops))
+		if len(data.Stops) == 0 {
+			t.Fatal("HTTP endpoint returned 0 stops without dest filter")
+		}
+
+		destinations := map[string]bool{}
+		for _, s := range data.Stops {
+			for _, a := range s.Arrivals {
+				destinations[a.Destination] = true
+			}
+		}
+		t.Logf("Destinations found (no filter): %v", destinations)
+		// Without dest filter, we expect both directions (multiple destinations)
+		if len(destinations) < 2 {
+			t.Logf("Warning: only %d destination(s) found without filter — may be normal if only one direction is running", len(destinations))
+		}
+	})
+}
+
 // TestNearbyStops_E2E tests the nearby_arrivals MCP tool and the
 // GET /api/arrivals/nearby HTTP endpoint at the given coordinates.
 func TestNearbyStops_E2E(t *testing.T) {
