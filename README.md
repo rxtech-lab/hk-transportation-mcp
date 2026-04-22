@@ -308,8 +308,60 @@ make docker
 
 ### Kubernetes
 
+The `k8s/` folder contains a complete Kustomize-based deployment for:
+- `Deployment` + `Service` for `hk-transportation-mcp`
+- `Deployment` + `Service` for Redis
+- `CronJob` for periodic data sync (`hk-transportation-mcp-sync`)
+- `HorizontalPodAutoscaler` for the backend deployment
+- `Ingress` with TLS annotations for NGINX + cert-manager
+- `ConfigMap` for non-secret runtime configuration
+
+Before deploying:
+
+1. Create the namespace (if needed):
+
+```bash
+kubectl create namespace hk-transportation-mcp
+```
+
+2. Create the app secret used by both backend and sync job:
+
+```bash
+kubectl -n hk-transportation-mcp create secret generic hk-transportation-mcp-secret \
+  --from-literal=DATABASE_URL='postgres://...' \
+  --from-literal=WASENDER_API_KEY='...' \
+  --from-literal=AI_GATEWAY_API_KEY='...' \
+  --from-literal=OAUTH_SERVER_URL='...' \
+  --from-literal=OAUTH_ISSUER='...' \
+  --from-literal=OAUTH_AUDIENCE='...'
+```
+
+3. Ensure container image references in `k8s/deployment.yaml` and `k8s/cronjob.yaml` are set to images your cluster can pull.
+
+Deploy all resources:
+
 ```bash
 make deploy
+```
+
+Or directly with Kustomize:
+
+```bash
+kubectl apply -k k8s/
+```
+
+Verify rollout and runtime status:
+
+```bash
+kubectl -n hk-transportation-mcp get pods,svc,ingress,cronjob,hpa
+kubectl -n hk-transportation-mcp rollout status deployment/hk-transportation-mcp
+kubectl -n hk-transportation-mcp logs deployment/hk-transportation-mcp --tail=100
+```
+
+For one-off sync debugging, run:
+
+```bash
+kubectl -n hk-transportation-mcp create job --from=cronjob/hk-transportation-mcp-sync manual-sync-$(date +%s)
 ```
 
 ## License
