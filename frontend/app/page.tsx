@@ -12,7 +12,9 @@ import { TransportMap } from "@/components/transport-map";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { useArrivalsRefresh } from "@/hooks/use-arrivals-refresh";
 import { useI18n } from "@/lib/i18n/i18n-provider";
+import { privacyContent } from "@/lib/i18n/privacy-content";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import Link from "next/link";
 import {
   Drawer,
   DrawerContent,
@@ -34,7 +36,7 @@ export default function Home() {
   const [mapWidthPct, setMapWidthPct] = useState(45);
   const containerRef = useRef<HTMLDivElement>(null);
   const geo = useGeolocation();
-  const { dict } = useI18n();
+  const { dict, locale } = useI18n();
   const geoRequestedRef = useRef(false);
 
   const { messages, sendMessage, status, setMessages, error, addToolOutput } =
@@ -341,6 +343,16 @@ export default function Home() {
                 ))}
               </div>
             </motion.div>
+
+            {/* Footer */}
+            <div className="absolute bottom-0 inset-x-0 z-10 flex justify-center pb-5 safe-bottom">
+              <Link
+                href="/privacy"
+                className="text-[12px] text-zinc-600 hover:text-zinc-300 transition-colors"
+              >
+                {privacyContent[locale].title}
+              </Link>
+            </div>
           </motion.div>
         ) : (
           <motion.div

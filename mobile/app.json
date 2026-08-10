@@ -12,7 +12,9 @@
       "bundleIdentifier": "com.rxlab.hktransport",
       "icon": "./assets/images/ios-icon.png",
       "entitlements": {
-        "com.apple.security.application-groups": ["group.com.rxlab.hktransport"]
+        "com.apple.security.application-groups": [
+          "group.com.rxlab.hktransport"
+        ]
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We use your location to find nearby bus stops and show real-time arrivals.",
@@ -67,7 +69,14 @@
         }
       ],
       "expo-sqlite",
-      "@bacons/apple-targets"
+      "@bacons/apple-targets",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "We use the microphone so you can speak your question instead of typing it.",
+          "speechRecognitionPermission": "Speech is transcribed on your device to turn what you say into text."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
