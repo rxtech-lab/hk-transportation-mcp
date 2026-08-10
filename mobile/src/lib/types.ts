@@ -1,5 +1,20 @@
+export interface ArrivalsQuery {
+  endpoint: "nearby" | "route";
+  lat: number;
+  lon: number;
+  radius?: number;
+  routes?: string;
+  dest_lat?: number;
+  dest_lon?: number;
+  radius_origin?: number;
+  radius_dest?: number;
+  max_transfers?: number;
+}
+
 export interface DisplayArrivalsInput {
   title?: string;
+  query?: ArrivalsQuery;
+  /** @deprecated Superseded by `query`; only present in chat sessions persisted before the switch. */
   url?: string;
   stops?: StopData[];
 }

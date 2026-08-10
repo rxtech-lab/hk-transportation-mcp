@@ -232,6 +232,32 @@ func TestStopETA_E2E(t *testing.T) {
 	}
 }
 
+// displayQueryPayload mirrors the display_query object the MCP tools return.
+// Clients build the arrivals URL from these fields instead of transcribing
+// display_url, which models garble.
+type displayQueryPayload struct {
+	Endpoint     string  `json:"endpoint"`
+	Lat          float64 `json:"lat"`
+	Lon          float64 `json:"lon"`
+	Radius       float64 `json:"radius"`
+	Routes       string  `json:"routes"`
+	DestLat      float64 `json:"dest_lat"`
+	DestLon      float64 `json:"dest_lon"`
+	RadiusOrigin float64 `json:"radius_origin"`
+	RadiusDest   float64 `json:"radius_dest"`
+	MaxTransfers int     `json:"max_transfers"`
+}
+
+func checkDisplayQuery(t *testing.T, q displayQueryPayload, wantEndpoint string) {
+	t.Helper()
+	if q.Endpoint != wantEndpoint {
+		t.Errorf("display_query.endpoint = %q, want %q", q.Endpoint, wantEndpoint)
+	}
+	if q.Lat == 0 || q.Lon == 0 {
+		t.Errorf("display_query missing coordinates: lat=%v lon=%v", q.Lat, q.Lon)
+	}
+}
+
 // TestRouteNearbyArrivals_E2E tests the route_nearby_arrivals MCP tool and the
 // GET /api/arrivals/nearby?routes=X&dest_lat=Y&dest_lon=Z endpoint.
 // Verifies that direction filtering works correctly for CTB route 77.
@@ -259,7 +285,8 @@ func TestRouteNearbyArrivals_E2E(t *testing.T) {
 					Operator    string `json:"operator"`
 				} `json:"arrivals"`
 			} `json:"stops"`
-			DisplayURL string `json:"display_url"`
+			DisplayURL   string              `json:"display_url"`
+			DisplayQuery displayQueryPayload `json:"display_query"`
 		}
 		if err := json.Unmarshal(result, &data); err != nil {
 			t.Fatalf("decode route_nearby_arrivals: %v", err)
@@ -271,6 +298,10 @@ func TestRouteNearbyArrivals_E2E(t *testing.T) {
 		}
 		if data.DisplayURL == "" {
 			t.Error("display_url is empty")
+		}
+		checkDisplayQuery(t, data.DisplayQuery, "nearby")
+		if data.DisplayQuery.Routes != "77" {
+			t.Errorf("display_query.routes = %q, want %q", data.DisplayQuery.Routes, "77")
 		}
 
 		// Should return arrivals for both directions
@@ -308,7 +339,8 @@ func TestRouteNearbyArrivals_E2E(t *testing.T) {
 					Operator    string `json:"operator"`
 				} `json:"arrivals"`
 			} `json:"stops"`
-			DisplayURL string `json:"display_url"`
+			DisplayURL   string              `json:"display_url"`
+			DisplayQuery displayQueryPayload `json:"display_query"`
 		}
 		if err := json.Unmarshal(result, &data); err != nil {
 			t.Fatalf("decode route_nearby_arrivals: %v", err)
@@ -320,6 +352,11 @@ func TestRouteNearbyArrivals_E2E(t *testing.T) {
 		}
 		if data.DisplayURL == "" {
 			t.Error("display_url is empty")
+		}
+		checkDisplayQuery(t, data.DisplayQuery, "nearby")
+		if data.DisplayQuery.DestLat == 0 || data.DisplayQuery.DestLon == 0 {
+			t.Errorf("display_query missing geocoded destination: dest_lat=%v dest_lon=%v",
+				data.DisplayQuery.DestLat, data.DisplayQuery.DestLon)
 		}
 
 		// All arrivals should be in the same direction (towards Shau Kei Wan / Causeway Bay = outbound "O")
@@ -460,7 +497,8 @@ func TestNearbyStops_E2E(t *testing.T) {
 					Operator string `json:"operator"`
 				} `json:"arrivals"`
 			} `json:"stops"`
-			DisplayURL string `json:"display_url"`
+			DisplayURL   string              `json:"display_url"`
+			DisplayQuery displayQueryPayload `json:"display_query"`
 		}
 		if err := json.Unmarshal(result, &data); err != nil {
 			t.Fatalf("decode nearby_arrivals: %v", err)
@@ -482,6 +520,7 @@ func TestNearbyStops_E2E(t *testing.T) {
 		if data.DisplayURL == "" {
 			t.Error("display_url is empty")
 		}
+		checkDisplayQuery(t, data.DisplayQuery, "nearby")
 	})
 
 	// Test 2: HTTP GET /api/arrivals/nearby
@@ -595,8 +634,9 @@ func TestRouteSearch_E2E(t *testing.T) {
 					NameEn string `json:"name_en"`
 				} `json:"dest_stop"`
 			} `json:"candidate_routes"`
-			TransferRoutes []json.RawMessage `json:"transfer_routes"`
-			DisplayURL     string            `json:"display_url"`
+			TransferRoutes []json.RawMessage   `json:"transfer_routes"`
+			DisplayURL     string              `json:"display_url"`
+			DisplayQuery   displayQueryPayload `json:"display_query"`
 		}
 		if err := json.Unmarshal(result, &data); err != nil {
 			t.Fatalf("decode route_arrivals: %v\nraw: %s", err, string(result)[:min(500, len(result))])
@@ -615,6 +655,11 @@ func TestRouteSearch_E2E(t *testing.T) {
 
 		if data.DisplayURL == "" {
 			t.Error("display_url is empty")
+		}
+		checkDisplayQuery(t, data.DisplayQuery, "route")
+		if data.DisplayQuery.DestLat == 0 || data.DisplayQuery.DestLon == 0 {
+			t.Errorf("display_query missing destination: dest_lat=%v dest_lon=%v",
+				data.DisplayQuery.DestLat, data.DisplayQuery.DestLon)
 		}
 	})
 

@@ -243,7 +243,7 @@ export default function ChatScreen() {
     if (last && !last.stops?.length && lastToolCallId) {
       const fetched = fetchedArrivals.current.get(lastToolCallId);
       if (fetched) {
-        last = { ...fetched, url: last.url };
+        last = { ...fetched, query: last.query, url: last.url };
       }
     }
     return last;

@@ -84,13 +84,14 @@ export async function POST(req: Request) {
     const mcpClient = await getMCPClient();
     const tools = await mcpClient.tools();
 
-    const clientTools: Record<string, typeof displayArrivalsTool | typeof getUserLocationTool | typeof showLiveActivityTool> = {
+    // Keep the per-key tool types inferred. Annotating this as a Record of a
+    // union collapses the three tools into one type, widening inputSchema to
+    // FlexibleSchema<unknown>, which no longer satisfies ToolSet.
+    const clientTools = {
       display_arrivals: displayArrivalsTool,
       get_user_location: getUserLocationTool,
+      ...(hasLiveActivity ? { show_live_activity: showLiveActivityTool } : {}),
     };
-    if (hasLiveActivity) {
-      clientTools.show_live_activity = showLiveActivityTool;
-    }
 
     const result = streamText({
       model: AI_MODEL,
@@ -114,9 +115,9 @@ Examples:
 
 This syntax will be rendered as an interactive button that shows the location on a map. Always use this format instead of listing coordinates as plain text. You can use it inline within sentences or in lists.
 
-IMPORTANT: After you receive arrival/ETA data from MCP tools (e.g. nearby_arrivals, route_arrivals), you MUST call the display_arrivals tool to present the data as a rich visual card. Pass the "display_url" value from the MCP response as the "url" field in display_arrivals. Do NOT pass the stops/arrival data — the frontend fetches it directly from the URL. Include a "title" if appropriate (e.g. "Nearby arrivals" or the route name). When you call display_arrivals, do NOT also include a text table or summary of the same arrival data — the card already shows it visually. Just provide a brief natural language response (e.g. "Here are the upcoming arrivals") alongside the tool call.
+IMPORTANT: After you receive arrival/ETA data from MCP tools (e.g. nearby_arrivals, route_arrivals), you MUST call the display_arrivals tool to present the data as a rich visual card. Pass the "display_query" object from the MCP response as the "query" field in display_arrivals, copying every field it contains (endpoint, lat, lon, radius, routes, dest_lat, dest_lon, radius_origin, radius_dest, max_transfers) exactly as given — do not round, reformat, or omit values. Ignore the "display_url" field; the frontend builds the URL itself. Do NOT pass the stops/arrival data. Include a "title" if appropriate (e.g. "Nearby arrivals" or the route name). When you call display_arrivals, do NOT also include a text table or summary of the same arrival data — the card already shows it visually. Just provide a brief natural language response (e.g. "Here are the upcoming arrivals") alongside the tool call.
 
-If the MCP response does not include a display_url, fall back to extracting stop data manually: extract stop names, coordinates, routes, destinations, and ETA minutes and pass them as "stops". Every stop MUST have an "id" field set to the stop_id from the MCP response for real-time auto-refresh.${hasLiveActivity ? `
+If the MCP response does not include a display_query, fall back to extracting stop data manually: extract stop names, coordinates, routes, destinations, and ETA minutes and pass them as "stops". Every stop MUST have an "id" field set to the stop_id from the MCP response for real-time auto-refresh.${hasLiveActivity ? `
 
 After showing arrival data for a specific route, proactively ask the user if they'd like to track the bus on their Lock Screen. If the user agrees, call show_live_activity with the route details including the route number, stop name, stop ID, destination, and current ETAs.` : ""}`,
     });

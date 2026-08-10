@@ -12,6 +12,23 @@ import (
 	"github.com/rxtech-lab/hk-transportation-mcp/internal/service"
 )
 
+// displayQuery describes the arrivals request a client should issue to render
+// a rich card. It is emitted alongside display_url because models garble long
+// query strings when copying them verbatim (dropped "&" separators produce an
+// unparseable request); clients build the URL from these fields instead.
+type displayQuery struct {
+	Endpoint     string  `json:"endpoint"` // "nearby" or "route"
+	Lat          float64 `json:"lat"`
+	Lon          float64 `json:"lon"`
+	Radius       float64 `json:"radius,omitempty"`
+	Routes       string  `json:"routes,omitempty"`
+	DestLat      float64 `json:"dest_lat,omitempty"`
+	DestLon      float64 `json:"dest_lon,omitempty"`
+	RadiusOrigin float64 `json:"radius_origin,omitempty"`
+	RadiusDest   float64 `json:"radius_dest,omitempty"`
+	MaxTransfers int     `json:"max_transfers,omitempty"`
+}
+
 // Register adds all MCP tools to the server.
 func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route *service.RouteArrivalsService, search *service.SearchLocationService, index *geo.StopIndex, backendURL ...string) {
 	baseURL := "http://localhost:8080"
@@ -50,10 +67,16 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 			}
-			// Wrap result with display_url for frontend direct fetch
+			// Wrap result with display_url/display_query for frontend direct fetch
 			wrapped := map[string]interface{}{
 				"stops":       result.Stops,
 				"display_url": fmt.Sprintf("%s/api/arrivals/nearby?lat=%v&lon=%v&radius=%v", baseURL, lat, lon, radius),
+				"display_query": displayQuery{
+					Endpoint: "nearby",
+					Lat:      lat,
+					Lon:      lon,
+					Radius:   radius,
+				},
 			}
 			data, err := json.Marshal(wrapped)
 			if err != nil {
@@ -120,7 +143,7 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 			}
-			// Wrap result with display_url for frontend direct fetch
+			// Wrap result with display_url/display_query for frontend direct fetch
 			displayURL := fmt.Sprintf("%s/api/arrivals/nearby?lat=%v&lon=%v&radius=%v&routes=%s", baseURL, lat, lon, radius, routeNumber)
 			if destLat != 0 || destLon != 0 {
 				displayURL += fmt.Sprintf("&dest_lat=%v&dest_lon=%v", destLat, destLon)
@@ -128,6 +151,15 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 			wrapped := map[string]interface{}{
 				"stops":       result.Stops,
 				"display_url": displayURL,
+				"display_query": displayQuery{
+					Endpoint: "nearby",
+					Lat:      lat,
+					Lon:      lon,
+					Radius:   radius,
+					Routes:   routeNumber,
+					DestLat:  destLat,
+					DestLon:  destLon,
+				},
 			}
 			data, err := json.Marshal(wrapped)
 			if err != nil {
@@ -195,13 +227,23 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 			}
-			// Wrap result with display_url for frontend direct fetch
+			// Wrap result with display_url/display_query for frontend direct fetch
 			displayURL := fmt.Sprintf("%s/api/arrivals/route?lat=%v&lon=%v&dest_lat=%v&dest_lon=%v&radius_origin=%v&radius_dest=%v&max_transfers=%v",
 				baseURL, lat, lon, destLat, destLon, radiusOrigin, radiusDest, maxTransfers)
 			wrapped := map[string]interface{}{
 				"candidate_routes": result.CandidateRoutes,
 				"transfer_routes":  result.TransferRoutes,
 				"display_url":      displayURL,
+				"display_query": displayQuery{
+					Endpoint:     "route",
+					Lat:          lat,
+					Lon:          lon,
+					DestLat:      destLat,
+					DestLon:      destLon,
+					RadiusOrigin: radiusOrigin,
+					RadiusDest:   radiusDest,
+					MaxTransfers: maxTransfers,
+				},
 			}
 			data, err := json.Marshal(wrapped)
 			if err != nil {

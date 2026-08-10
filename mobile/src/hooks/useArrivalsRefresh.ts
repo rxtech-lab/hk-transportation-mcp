@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useMemo } from "react";
 import { BACKEND_URL } from "@/lib/config";
+import { resolveArrivalsURL } from "@/lib/arrivals-query";
 import type { DisplayArrivalsInput, StopData } from "@/lib/types";
 import { updateWidget } from "@/lib/widget";
 
@@ -20,13 +21,8 @@ async function fetchArrivals(
 }
 
 async function fetchArrivalsFromURL(url: string): Promise<StopData[]> {
-  // Rewrite the host to BACKEND_URL so it works in the mobile environment
-  const parsed = new URL(url);
-  const backend = new URL(BACKEND_URL);
-  parsed.protocol = backend.protocol;
-  parsed.host = backend.host;
-  const res = await fetch(parsed.toString());
-  if (!res.ok) throw new Error("Failed to fetch arrivals from URL");
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch arrivals (${res.status})`);
   const data = await res.json();
   return data.stops ?? [];
 }
@@ -37,7 +33,7 @@ export function useArrivalsRefresh(
 ) {
   const stops = arrivalsData?.stops;
   const hasStops = !!stops?.length;
-  const refreshURL = arrivalsData?.url;
+  const refreshURL = arrivalsData ? resolveArrivalsURL(arrivalsData) : null;
 
   const queryStops = useMemo(
     () =>

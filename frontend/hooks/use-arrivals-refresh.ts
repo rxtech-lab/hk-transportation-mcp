@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useMemo } from "react";
 import type { DisplayArrivalsInput } from "@/lib/tools/display-arrivals";
+import { buildArrivalsURL } from "@/lib/arrivals-query";
 import { BACKEND_URL } from "@/lib/config";
 
 const REFRESH_INTERVAL = 30_000;
@@ -35,7 +36,11 @@ export function useArrivalsRefresh(
 ) {
   const stops = arrivalsData?.stops;
   const hasStops = !!stops?.length;
-  const refreshURL = arrivalsData?.url;
+  const query = arrivalsData?.query;
+  const refreshURL = useMemo(
+    () => (query ? buildArrivalsURL(query, BACKEND_URL) : undefined),
+    [query],
+  );
 
   const queryStops = useMemo(
     () =>
