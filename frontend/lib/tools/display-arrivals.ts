@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod/v4";
+import { arrivalsQuerySchema } from "@/lib/arrivals-query";
 
 const arrivalSchema = z.object({
   route: z.string(),
@@ -22,13 +23,15 @@ const stopSchema = z.object({
 
 export const displayArrivalsSchema = z.object({
   title: z.string().optional(),
-  url: z.string().optional().describe("The display_url from the MCP tool response. Frontend fetches arrival data from this URL instead of requiring stops data."),
+  query: arrivalsQuerySchema
+    .optional()
+    .describe("The display_query object from the MCP tool response, copied field by field. The frontend builds the arrivals URL from it and fetches the data."),
   stops: z.array(stopSchema).optional(),
 });
 
 export const displayArrivalsTool = tool({
   description:
-    "Display bus arrival info as a rich card. Pass the display_url from the MCP tool response as the 'url' field. The frontend fetches arrival data directly from the URL. Only include 'stops' if no display_url is available.",
+    "Display bus arrival info as a rich card. Pass the display_query object from the MCP tool response as the 'query' field, copying each of its fields (endpoint, lat, lon, radius, routes, dest_lat, dest_lon, ...) exactly. The frontend fetches arrival data itself. Only include 'stops' if no display_query is available.",
   inputSchema: displayArrivalsSchema,
   // No execute — client-side tool
 });

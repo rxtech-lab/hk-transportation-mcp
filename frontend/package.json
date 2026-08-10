@@ -9,14 +9,14 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "^1.0.25",
-    "@ai-sdk/openai": "^3.0.41",
-    "@ai-sdk/react": "^3.0.118",
+    "@ai-sdk/mcp": "^2.0.29",
+    "@ai-sdk/openai": "^4.0.36",
+    "@ai-sdk/react": "^4.0.61",
     "@tabler/icons-react": "^3.40.0",
     "@tanstack/react-query": "^5.91.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",
-    "ai": "^6.0.116",
+    "ai": "^7.0.58",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",

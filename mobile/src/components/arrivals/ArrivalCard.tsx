@@ -100,10 +100,12 @@ export function ArrivalCard({
   );
   const canExpand = totalRows > DEFAULT_VISIBLE_ROWS;
 
-  if (!stopsWithArrivals.length && !data.url) return null;
+  const isPendingFetch = !!(data.query || data.url);
 
-  // URL-based flow: show loading state while stops are being fetched
-  if (!stopsWithArrivals.length && data.url) {
+  if (!stopsWithArrivals.length && !isPendingFetch) return null;
+
+  // Query-based flow: show loading state while stops are being fetched
+  if (!stopsWithArrivals.length) {
     return (
       <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
         <View style={[styles.header, { borderBottomColor: theme.separator }]}>

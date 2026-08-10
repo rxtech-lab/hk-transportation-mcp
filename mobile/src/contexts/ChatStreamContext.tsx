@@ -17,21 +17,17 @@ import { fetch as expoFetch } from "expo/fetch";
 import * as Haptics from "expo-haptics";
 
 import { useGeolocation } from "@/hooks/useGeolocation";
-import { FRONTEND_URL, BACKEND_URL } from "@/lib/config";
+import { FRONTEND_URL } from "@/lib/config";
+import { resolveArrivalsURL } from "@/lib/arrivals-query";
 import { updateWidget } from "@/lib/widget";
 import { startTracking } from "@/lib/live-activity";
 import type { DisplayArrivalsInput } from "@/lib/types";
 
-async function fetchArrivalsFromURL(
-  url: string,
-): Promise<DisplayArrivalsInput> {
-  // Rewrite the host to BACKEND_URL so it works in the mobile environment
-  const parsed = new URL(url);
-  const backend = new URL(BACKEND_URL);
-  parsed.protocol = backend.protocol;
-  parsed.host = backend.host;
-  const res = await fetch(parsed.toString());
-  if (!res.ok) throw new Error("Failed to fetch arrivals from URL");
+async function fetchArrivals(url: string): Promise<DisplayArrivalsInput> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch arrivals (${res.status})`);
+  }
   const data = await res.json();
   return { stops: data.stops ?? [] };
 }
@@ -126,7 +122,7 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (toolCall.toolName === "display_arrivals") {
         const input = toolCall.input as DisplayArrivalsInput;
-        console.log("[display_arrivals] input:", JSON.stringify({ url: input.url, stopsLength: input.stops?.length, title: input.title }));
+        const url = resolveArrivalsURL(input);
         // Always send tool output immediately so the AI stream doesn't stall
         addToolOutput({
           tool: "display_arrivals" as never,
@@ -135,17 +131,22 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-        if (input.url && !input.stops?.length) {
-          // URL-based flow: fetch data from backend URL in background
-          fetchArrivalsFromURL(input.url)
+        if (url && !input.stops?.length) {
+          // Query-based flow: fetch data from the backend in the background
+          fetchArrivals(url)
             .then((resolved) => {
-              const data = { ...resolved, title: input.title, url: input.url };
+              const data = {
+                ...resolved,
+                title: input.title,
+                query: input.query,
+                url: input.url,
+              };
               fetchedArrivals.current.set(toolCall.toolCallId, data);
               setFetchedArrivalsVersion((v) => v + 1);
               updateWidget(data);
             })
             .catch((err) => {
-              console.error("[fetchArrivalsFromURL] failed:", err, "url:", input.url);
+              console.error("[fetchArrivals] failed:", err, "url:", url);
             });
         } else {
           // Legacy flow: stops data passed directly
