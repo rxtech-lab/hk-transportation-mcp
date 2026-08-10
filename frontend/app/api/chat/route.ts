@@ -5,10 +5,13 @@ import {
   Output,
   convertToModelMessages,
   stepCountIs,
+  toUIMessageStream,
+  createUIMessageStreamResponse,
 } from "ai";
 import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
 import { AI_MODEL } from "@/lib/config";
+import { createV6CompatTransform } from "@/lib/ui-stream-compat";
 import { getMCPClient, resetMCPClient } from "@/lib/mcp-client";
 import { displayArrivalsTool } from "@/lib/tools/display-arrivals";
 import { getUserLocationTool } from "@/lib/tools/get-user-location";
@@ -61,10 +64,14 @@ export async function POST(req: Request) {
     const { messages, id: chatId, capabilities: bodyCapabilities } = body;
 
     const recentMessages = Array.isArray(messages) ? messages.slice(-20) : [];
+    console.log(
+      `[chat/POST] chatId=${chatId ?? "none"} messages=${recentMessages.length} capabilities=${JSON.stringify(bodyCapabilities ?? [])}`,
+    );
     const modelMessages = await convertToModelMessages(recentMessages);
 
     const isValidIntent = await isHongKongTransportationQuery(modelMessages);
     if (!isValidIntent) {
+      console.warn("[chat/POST] rejected: off-topic query");
       return Response.json(
         {
           error:
@@ -83,6 +90,9 @@ export async function POST(req: Request) {
 
     const mcpClient = await getMCPClient();
     const tools = await mcpClient.tools();
+    console.log(
+      `[chat/POST] mcp tools: ${Object.keys(tools).join(", ") || "(none)"}`,
+    );
 
     // Keep the per-key tool types inferred. Annotating this as a Record of a
     // union collapses the three tools into one type, widening inputSchema to
@@ -93,9 +103,11 @@ export async function POST(req: Request) {
       ...(hasLiveActivity ? { show_live_activity: showLiveActivityTool } : {}),
     };
 
+    const allTools = { ...tools, ...clientTools };
+
     const result = streamText({
       model: AI_MODEL,
-      tools: { ...tools, ...clientTools },
+      tools: allTools,
       messages: modelMessages,
       stopWhen: stepCountIs(20),
       system: `You are an HK bus transportation assistant. Help users find bus routes, nearby stops, and arrival times in Hong Kong.
@@ -122,12 +134,26 @@ If the MCP response does not include a display_query, fall back to extracting st
 After showing arrival data for a specific route, proactively ask the user if they'd like to track the bus on their Lock Screen. If the user agrees, call show_live_activity with the route details including the route number, stop name, stop ID, destination, and current ETAs.` : ""}`,
     });
 
-    return result.toUIMessageStreamResponse({
-      onFinish: chatId
+    const uiStream = toUIMessageStream({
+      stream: result.stream,
+      tools: allTools,
+      onError: (error) => {
+        // Detail stays server-side; the client gets the SDK's generic text.
+        console.error("[chat/POST] stream error:", error);
+        return "An error occurred.";
+      },
+      onEnd: chatId
         ? () => {
+            console.log(`[chat/POST] stream finished chatId=${chatId}`);
             clearActiveStreamId(chatId);
           }
         : undefined,
+    });
+
+    return createUIMessageStreamResponse({
+      // The mobile app is pinned to AI SDK v6, whose chunk schema rejects
+      // v7-only fields (e.g. `toolMetadata`) with an `invalid_union` error.
+      stream: uiStream.pipeThrough(createV6CompatTransform()),
       consumeSseStream: chatId
         ? async ({ stream }) => {
             const streamId = generateId();
@@ -140,6 +166,7 @@ After showing arrival data for a specific route, proactively ask the user if the
         : undefined,
     });
   } catch (error) {
+    console.error("[chat/POST] failed:", error);
     // Reset client on connection errors so next request retries
     resetMCPClient();
     const message =
