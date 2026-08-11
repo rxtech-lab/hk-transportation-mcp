@@ -5,6 +5,12 @@ import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls, isToolUIPart } from "ai";
 import { AnimatePresence, motion } from "framer-motion";
 import type { DisplayArrivalsInput } from "@/lib/tools/display-arrivals";
+import type { DisplayRouteInput } from "@/lib/tools/display-route";
+import {
+  fetchRouteInfo,
+  summarizeRouteInfo,
+  type RouteInfoData,
+} from "@/lib/route-query";
 import { IconBus, IconMap, IconPlus } from "@tabler/icons-react";
 import { ChatInput } from "@/components/chat-input";
 import { ChatMessages, type MapData, type LocationPin } from "@/components/chat-messages";
@@ -12,7 +18,9 @@ import { TransportMap } from "@/components/transport-map";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { useArrivalsRefresh } from "@/hooks/use-arrivals-refresh";
 import { useI18n } from "@/lib/i18n/i18n-provider";
+import { privacyContent } from "@/lib/i18n/privacy-content";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import Link from "next/link";
 import {
   Drawer,
   DrawerContent,
@@ -34,8 +42,10 @@ export default function Home() {
   const [mapWidthPct, setMapWidthPct] = useState(45);
   const containerRef = useRef<HTMLDivElement>(null);
   const geo = useGeolocation();
-  const { dict } = useI18n();
+  const { dict, locale } = useI18n();
   const geoRequestedRef = useRef(false);
+  const fetchedRoutes = useRef(new Map<string, RouteInfoData>());
+  const [fetchedRoutesVersion, setFetchedRoutesVersion] = useState(0);
 
   const { messages, sendMessage, status, setMessages, error, addToolOutput } =
     useChat({
@@ -71,6 +81,31 @@ export default function Home() {
             toolCallId: toolCall.toolCallId,
             output: "Arrival card displayed to user.",
           });
+        }
+        if (toolCall.toolName === "display_route") {
+          const input = (toolCall as { input: unknown }).input as DisplayRouteInput;
+          // Unlike arrivals, the model needs the outcome: whether the route
+          // exists at all, and which directions it runs.
+          fetchRouteInfo(input)
+            .then((data) => {
+              fetchedRoutes.current.set(toolCall.toolCallId, data);
+              setFetchedRoutesVersion((v) => v + 1);
+              addToolOutput({
+                tool: "display_route" as never,
+                toolCallId: toolCall.toolCallId,
+                output: summarizeRouteInfo(data),
+              });
+            })
+            .catch((err) => {
+              console.error("[fetchRouteInfo] failed:", err, "input:", input);
+              addToolOutput({
+                tool: "display_route" as never,
+                toolCallId: toolCall.toolCallId,
+                output: `Failed to load route ${input.route}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              });
+            });
         }
         if (toolCall.toolName === "get_user_location") {
           geo.request().then((coords) => {
@@ -156,6 +191,8 @@ export default function Home() {
     setMessages([]);
     setMapData({ stops: [], routes: [] });
     setArrivalsOverride(null);
+    fetchedRoutes.current.clear();
+    setFetchedRoutesVersion((v) => v + 1);
     clearChatStorage();
     setIsLanding(true);
     setShowMobileMap(false);
@@ -341,6 +378,16 @@ export default function Home() {
                 ))}
               </div>
             </motion.div>
+
+            {/* Footer */}
+            <div className="absolute bottom-0 inset-x-0 z-10 flex justify-center pb-5 safe-bottom">
+              <Link
+                href="/privacy"
+                className="text-[12px] text-zinc-600 hover:text-zinc-300 transition-colors"
+              >
+                {privacyContent[locale].title}
+              </Link>
+            </div>
           </motion.div>
         ) : (
           <motion.div
@@ -381,6 +428,8 @@ export default function Home() {
                 onLocationClick={handleLocationClick}
                 isLoading={isLoading}
                 arrivalsData={arrivalsData}
+                fetchedRoutes={fetchedRoutes.current}
+                fetchedRoutesVersion={fetchedRoutesVersion}
                 lastRefreshedAt={lastRefreshedAt}
                 onRefresh={refetchArrivals}
                 isRefreshing={isRefreshing}

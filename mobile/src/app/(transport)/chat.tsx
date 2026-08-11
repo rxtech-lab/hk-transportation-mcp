@@ -71,6 +71,8 @@ export default function ChatScreen() {
     geo,
     fetchedArrivals,
     fetchedArrivalsVersion,
+    fetchedRoutes,
+    fetchedRoutesVersion,
   } = use(ChatStreamContext);
 
   useEffect(() => {
@@ -256,7 +258,12 @@ export default function ChatScreen() {
     isRefreshing,
   } = useArrivalsRefresh(arrivalsData, setArrivalsOverride);
 
-  const mapData = useMapData(messages, arrivalsData);
+  const mapData = useMapData(
+    messages,
+    arrivalsData,
+    fetchedRoutes.current,
+    fetchedRoutesVersion,
+  );
 
   const userLocation =
     geo.latitude && geo.longitude

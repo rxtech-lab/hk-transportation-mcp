@@ -21,9 +21,23 @@ export default {
     routes: "routes",
     locationDenied: "Location access is off",
     locationSettings: "Open Settings",
+    voiceTitle: "Voice Input",
+    voiceHint: "Start speaking — your words appear here and stay on your device.",
+    voiceListening: "Listening…",
+    voiceTapToResume: "Tap the mic to keep speaking",
+    voiceDone: "Done",
+    voiceCancel: "Cancel",
+    voicePermission: "Microphone and speech recognition access is off",
+    voiceUnavailable: "Speech recognition isn't available on this device",
   },
   map: {
     title: "Map",
+  },
+  route: {
+    stopCount: "{0} stops",
+    showAllStops: "Show all {0} stops",
+    showLess: "Show less",
+    notFound: "No route information found for {0}",
   },
   settings: {
     language: "Language",

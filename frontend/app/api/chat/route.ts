@@ -14,6 +14,7 @@ import { AI_MODEL } from "@/lib/config";
 import { createV6CompatTransform } from "@/lib/ui-stream-compat";
 import { getMCPClient, resetMCPClient } from "@/lib/mcp-client";
 import { displayArrivalsTool } from "@/lib/tools/display-arrivals";
+import { displayRouteTool } from "@/lib/tools/display-route";
 import { getUserLocationTool } from "@/lib/tools/get-user-location";
 import { showLiveActivityTool } from "@/lib/tools/show-live-activity";
 import { checkRateLimit } from "@/lib/ratelimit";
@@ -26,26 +27,56 @@ const streamContext = createResumableStreamContext({
   waitUntil: after,
 });
 
+/** Plain text of the newest user message, ignoring tool calls/results. */
+function latestUserText(
+  modelMessages: Awaited<ReturnType<typeof convertToModelMessages>>,
+): string {
+  for (let i = modelMessages.length - 1; i >= 0; i--) {
+    const message = modelMessages[i];
+    if (message.role !== "user") continue;
+    if (typeof message.content === "string") return message.content;
+    return message.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join(" ");
+  }
+  return "";
+}
+
 async function isHongKongTransportationQuery(
   modelMessages: Awaited<ReturnType<typeof convertToModelMessages>>,
 ): Promise<boolean> {
-  const { output: classification } = await generateText({
-    model: AI_MODEL,
-    output: Output.choice({ options: ["YES", "NO"] }),
-    messages: modelMessages,
-    system: `You are a strict classifier for a Hong Kong transportation app.
+  const text = latestUserText(modelMessages).trim();
+  // Nothing to judge (empty turn, attachment-only, tool-result continuation).
+  if (!text) return true;
 
-Determine whether the user's message is related to transportation or could reasonably be a transportation query in the context of this app.
-Return exactly one word: YES or NO.
+  try {
+    const { output: classification } = await generateText({
+      model: AI_MODEL,
+      output: Output.choice({ options: ["YES", "NO"] }),
+      prompt: `User message:\n"""${text}"""`,
+      system: `You are a permissive topic filter for a Hong Kong transportation assistant.
 
-Return YES for:
-- Any mention of buses, routes, stops, arrivals, fares, directions, MTR, ferries, trams, minibuses, transit planning
-- Generic transportation queries like "buses near me", "nearby stops", "how do I get to X"
-- Greetings or follow-up messages in a conversation (e.g. "hello", "thanks", "yes")
-Return NO only for clearly unrelated topics (e.g. cooking recipes, stock prices, coding help).`,
-  });
+Your ONLY job is to block messages that are clearly about a completely different subject. When in doubt, answer YES.
+Answer with exactly one word: YES or NO.
 
-  return classification === "YES";
+Answer YES for:
+- Anything about buses, routes, stops, arrivals, ETAs, fares, directions, MTR, ferries, trams, minibuses, taxis, traffic, or trip planning
+- Places, addresses, landmarks, districts, or bare route numbers ("170", "Causeway Bay", "airport")
+- Greetings, thanks, confirmations, corrections, and short follow-ups ("hello", "yes", "the other direction", "how long?")
+- Short, vague, garbled, or partially transcribed speech input
+- Anything written in Chinese that could plausibly relate to getting around Hong Kong
+- Questions about what this assistant can do
+
+Answer NO only when the message is unmistakably about an unrelated topic with no travel angle at all — e.g. writing code, cooking recipes, stock prices, medical advice, homework help.`,
+    });
+
+    return classification !== "NO";
+  } catch (error) {
+    // Never let a classifier hiccup block a real query.
+    console.error("[chat/POST] intent classification failed, allowing:", error);
+    return true;
+  }
 }
 
 export async function POST(req: Request) {
@@ -99,6 +130,7 @@ export async function POST(req: Request) {
     // FlexibleSchema<unknown>, which no longer satisfies ToolSet.
     const clientTools = {
       display_arrivals: displayArrivalsTool,
+      display_route: displayRouteTool,
       get_user_location: getUserLocationTool,
       ...(hasLiveActivity ? { show_live_activity: showLiveActivityTool } : {}),
     };
@@ -113,6 +145,8 @@ export async function POST(req: Request) {
       system: `You are an HK bus transportation assistant. Help users find bus routes, nearby stops, and arrival times in Hong Kong.
 
 When the user asks about a specific bus route (e.g., "when is the next 170?" or "is the 960 coming soon?"), use the route_nearby_arrivals tool with their location and the route number. If the user specifies a direction or destination (e.g., "77 to Causeway Bay"), pass the destination name in the "destination" parameter — the tool will geocode it and filter to the correct direction automatically. Use nearby_arrivals only when the user wants to see ALL buses near them without specifying a route.
+
+When the user asks about a route ITSELF rather than about arrival times — "A11 route", "where does the 968 go?", "show me route 101", "does the 5B pass Causeway Bay?" — use the search_route tool, then you MUST call the display_route tool to present it as a rich card with the full stop list and a map line. Pass the route number, and the "operator" and "bound" from the search_route entry you are describing (omit bound when the user has not indicated a direction, so they can pick). Never pass stop data — the frontend fetches the stops itself. When you call display_route, do NOT also list the stops as text; the card already shows them. Just add a short natural language summary (e.g. "The A11 runs from North Point Ferry Pier to the Airport, calling at 23 stops."). This is location-independent — do NOT call get_user_location for it. If the user asks about a route AND when it arrives near them, call route_nearby_arrivals + display_arrivals as well.
 
 When querying for minibus (小巴) routes or stops, use "GMB" as the operator.
 

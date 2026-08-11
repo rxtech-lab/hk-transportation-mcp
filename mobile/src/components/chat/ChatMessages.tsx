@@ -2,6 +2,7 @@ import { use, useContext, useEffect, useRef, useMemo, useCallback } from "react"
 import { FlatList, StyleSheet, View, Animated, Easing, Keyboard, Platform, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 import { isToolUIPart, type UIMessage } from "ai";
 import { useRouter, useSegments } from "expo-router";
+import { HeaderHeightContext } from "@react-navigation/elements";
 import { MessageBubble } from "./MessageBubble";
 import { AssistantMessage, type ToolCallInfo } from "./AssistantMessage";
 import { ToolCallSheetContext } from "@/app/(transport)/_ctx";
@@ -26,7 +27,13 @@ interface PreparedItem {
   message?: UIMessage;
   toolPartsToRender?: Set<string>;
   lastArrivalsToolCallId?: string | null;
+  lastRouteToolCallId?: string | null;
 }
+
+/** Vertical padding of the list content container (see styles.content). */
+const CONTENT_PADDING = 16;
+/** Gap left above the pinned user message so it isn't flush with the top edge. */
+const PIN_TOP_GAP = 8;
 
 function TypingIndicator() {
   const anims = useRef([
@@ -106,16 +113,84 @@ export function ChatMessagesList({
   const segments = useSegments();
   const routePrefix = segments[0] === "history" ? "/history" : "/(transport)";
   const { setToolCallData } = use(ToolCallSheetContext);
-  const { fetchedArrivals, fetchedArrivalsVersion } = useContext(ChatStreamContext);
+  const {
+    fetchedArrivals,
+    fetchedArrivalsVersion,
+    fetchedRoutes,
+    fetchedRoutesVersion,
+  } = useContext(ChatStreamContext);
 
   const handleToolPress = useCallback((info: ToolCallInfo) => {
     setToolCallData(info);
     router.push(`${routePrefix}/tool-call` as any);
   }, [setToolCallData, router, routePrefix]);
 
-  const onLayout = useCallback((e: { nativeEvent: { layout: { height: number } } }) => {
-    layoutHeightRef.current = e.nativeEvent.layout.height;
-  }, []);
+  // --- Pin the latest user message to the top -------------------------------
+  // The list keeps a "blank" spacer below the last turn, sized so that
+  // (last turn + spacer) exactly fills the viewport. Scrolling to the end then
+  // lands the user message at the top. As the assistant streams, the turn grows
+  // and the spacer shrinks to 0, after which scrolling to the end just follows
+  // the stream as usual. Driven by an Animated.Value so per-frame height
+  // updates don't re-render the list.
+  const blankSize = useRef(new Animated.Value(0)).current;
+  const heightsRef = useRef(new Map<string, number>());
+  const itemsRef = useRef<PreparedItem[]>([]);
+  // The screens use headerTransparent, so the list frame runs behind the header
+  // and iOS adds no inset for it. We clear it ourselves with paddingTop, and
+  // subtract it here because scrollToEnd aligns content with the frame bottom —
+  // only (frame - header) is actually visible.
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  const headerHeightRef = useRef(headerHeight);
+  headerHeightRef.current = headerHeight;
+
+  const recomputeBlankSize = useCallback(() => {
+    const viewport = layoutHeightRef.current - headerHeightRef.current;
+    const list = itemsRef.current;
+    if (viewport <= 0 || list.length === 0) {
+      blankSize.setValue(0);
+      return;
+    }
+
+    let lastUserIndex = -1;
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i].type === "user") {
+        lastUserIndex = i;
+        break;
+      }
+    }
+    if (lastUserIndex === -1) {
+      blankSize.setValue(0);
+      return;
+    }
+
+    // Height of everything from the last user message to the end of the list.
+    let turnHeight = 0;
+    for (let i = lastUserIndex; i < list.length; i++) {
+      turnHeight += heightsRef.current.get(list[i].key) ?? 0;
+    }
+
+    blankSize.setValue(
+      Math.max(0, viewport - turnHeight - CONTENT_PADDING - PIN_TOP_GAP)
+    );
+  }, [blankSize]);
+
+  const onItemLayout = useCallback(
+    (key: string, height: number) => {
+      const prev = heightsRef.current.get(key);
+      if (prev !== undefined && Math.abs(prev - height) < 0.5) return;
+      heightsRef.current.set(key, height);
+      recomputeBlankSize();
+    },
+    [recomputeBlankSize]
+  );
+
+  const onLayout = useCallback(
+    (e: { nativeEvent: { layout: { height: number } } }) => {
+      layoutHeightRef.current = e.nativeEvent.layout.height;
+      recomputeBlankSize();
+    },
+    [recomputeBlankSize]
+  );
 
   const onContentSizeChange = useCallback((_w: number, h: number) => {
     isScrollableRef.current = h > layoutHeightRef.current;
@@ -141,6 +216,7 @@ export function ChatMessagesList({
     // Build dedup maps
     const latestToolState = new Map<string, string>();
     let lastArrivalsToolCallId: string | null = null;
+    let lastRouteToolCallId: string | null = null;
     for (const msg of messages) {
       for (const part of msg.parts) {
         if (isToolUIPart(part)) {
@@ -151,6 +227,9 @@ export function ChatMessagesList({
               : part.type.replace(/^tool-/, "");
           if (tn === "display_arrivals") {
             lastArrivalsToolCallId = part.toolCallId;
+          }
+          if (tn === "display_route") {
+            lastRouteToolCallId = part.toolCallId;
           }
         }
       }
@@ -194,21 +273,46 @@ export function ChatMessagesList({
           message: msg,
           toolPartsToRender,
           lastArrivalsToolCallId,
+          lastRouteToolCallId,
         });
       }
     }
 
-    // Typing indicator
-    if (
-      isLoading &&
-      messages.length > 0 &&
-      messages[messages.length - 1]?.role === "user"
-    ) {
+    // Typing indicator — keep visible for the whole stream, not just before
+    // the assistant's first chunk arrives
+    if (isLoading) {
       result.push({ key: "typing", type: "typing" });
     }
 
     return result;
   }, [messages, isLoading]);
+
+  // Keep the measurement cache in sync with the rendered items
+  useEffect(() => {
+    itemsRef.current = items;
+    const live = new Set(items.map((i) => i.key));
+    for (const key of heightsRef.current.keys()) {
+      if (!live.has(key)) heightsRef.current.delete(key);
+    }
+    recomputeBlankSize();
+  }, [items, recomputeBlankSize]);
+
+  // Pin the newest user message to the top as soon as it is sent
+  const lastUserKey = useMemo(() => {
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (items[i].type === "user") return items[i].key;
+    }
+    return null;
+  }, [items]);
+
+  useEffect(() => {
+    if (!lastUserKey) return;
+    isNearBottomRef.current = true;
+    const timer = setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated: true });
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [lastUserKey]);
 
   // Scroll to bottom when keyboard appears
   useEffect(() => {
@@ -245,31 +349,45 @@ export function ChatMessagesList({
 
   const renderItem = useCallback(
     ({ item }: { item: PreparedItem }) => {
+      let content;
       if (item.type === "user") {
-        return <MessageBubble text={item.text!} />;
-      }
-
-      if (item.type === "typing") {
-        return <TypingIndicator />;
+        content = <MessageBubble text={item.text!} />;
+      } else if (item.type === "typing") {
+        content = <TypingIndicator />;
+      } else {
+        content = (
+          <AssistantMessage
+            message={item.message!}
+            toolPartsToRender={item.toolPartsToRender!}
+            lastArrivalsToolCallId={item.lastArrivalsToolCallId ?? null}
+            arrivalsData={arrivalsData}
+            fetchedArrivals={fetchedArrivals.current}
+            lastRouteToolCallId={item.lastRouteToolCallId ?? null}
+            fetchedRoutes={fetchedRoutes.current}
+            onLocationClick={onLocationClick}
+            lastRefreshedAt={lastRefreshedAt}
+            onRefresh={onRefresh}
+            isRefreshing={isRefreshing}
+            onArrivalsExpand={onArrivalsExpand}
+            onToolPress={handleToolPress}
+          />
+        );
       }
 
       return (
-        <AssistantMessage
-          message={item.message!}
-          toolPartsToRender={item.toolPartsToRender!}
-          lastArrivalsToolCallId={item.lastArrivalsToolCallId ?? null}
-          arrivalsData={arrivalsData}
-          fetchedArrivals={fetchedArrivals.current}
-          onLocationClick={onLocationClick}
-          lastRefreshedAt={lastRefreshedAt}
-          onRefresh={onRefresh}
-          isRefreshing={isRefreshing}
-          onArrivalsExpand={onArrivalsExpand}
-          onToolPress={handleToolPress}
-        />
+        <View
+          onLayout={(e) => onItemLayout(item.key, e.nativeEvent.layout.height)}
+        >
+          {content}
+        </View>
       );
     },
-    [arrivalsData, fetchedArrivalsVersion, onLocationClick, lastRefreshedAt, onRefresh, isRefreshing, onArrivalsExpand, handleToolPress]
+    [arrivalsData, fetchedArrivalsVersion, fetchedRoutesVersion, onLocationClick, lastRefreshedAt, onRefresh, isRefreshing, onArrivalsExpand, handleToolPress, onItemLayout]
+  );
+
+  const listFooter = useMemo(
+    () => <Animated.View style={{ height: blankSize }} />,
+    [blankSize]
   );
 
   return (
@@ -278,9 +396,13 @@ export function ChatMessagesList({
       data={items}
       renderItem={renderItem}
       keyExtractor={(item) => item.key}
+      ListFooterComponent={listFooter}
       style={styles.container}
-      contentContainerStyle={styles.content}
-      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: headerHeight + CONTENT_PADDING },
+      ]}
+      contentInsetAdjustmentBehavior="never"
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
       onScroll={onScroll}

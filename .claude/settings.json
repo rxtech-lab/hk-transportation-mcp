@@ -5,7 +5,8 @@
       "Bash(gofmt -l ./internal ./cmd)",
       "Bash(chmod +x /private/tmp/claude-501/-Users-qiweili-Desktop-rxlab-hk-transportation-mcp/7beee682-fe96-4593-873b-7c99ae430bad/scratchpad/tsc-frontend.sh)",
       "Bash(/private/tmp/claude-501/-Users-qiweili-Desktop-rxlab-hk-transportation-mcp/7beee682-fe96-4593-873b-7c99ae430bad/scratchpad/tsc-frontend.sh)",
-      "Bash(/private/tmp/claude-501/-Users-qiweili-Desktop-rxlab-hk-transportation-mcp/7beee682-fe96-4593-873b-7c99ae430bad/scratchpad/tsc-mobile.sh)"
+      "Bash(/private/tmp/claude-501/-Users-qiweili-Desktop-rxlab-hk-transportation-mcp/7beee682-fe96-4593-873b-7c99ae430bad/scratchpad/tsc-mobile.sh)",
+      "Bash(zsh /private/tmp/claude-501/-Users-qiweili-Desktop-rxlab-hk-transportation-mcp/f513871b-630e-40e3-bdad-a910dd8320a6/scratchpad/install.sh)"
     ]
   }
 }

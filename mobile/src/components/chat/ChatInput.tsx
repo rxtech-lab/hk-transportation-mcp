@@ -5,10 +5,12 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/use-theme";
+import { VoiceInputSheet } from "./VoiceInputSheet";
 
 interface ChatInputProps {
   onSubmit: (text: string) => void;
@@ -24,6 +26,7 @@ export function ChatInput({
   compact = false,
 }: ChatInputProps) {
   const [text, setText] = useState("");
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const theme = useTheme();
 
   const handleSend = useCallback(() => {
@@ -34,7 +37,68 @@ export function ChatInput({
     setText("");
   }, [text, disabled, onSubmit]);
 
+  const handleOpenVoice = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
+    setVoiceOpen(true);
+  }, []);
+
+  const handleVoiceInsert = useCallback((spoken: string) => {
+    setText((prev) => (prev.trim() ? `${prev.trim()} ${spoken}` : spoken));
+  }, []);
+
   const canSend = text.trim().length > 0 && !disabled;
+
+  const micButton = (
+    <Pressable
+      onPress={handleOpenVoice}
+      disabled={disabled}
+      testID="voice-btn"
+      style={({ pressed }) => [
+        styles.micButton,
+        compact && styles.micButtonCompact,
+        pressed && styles.sendPressed,
+      ]}
+      hitSlop={8}
+    >
+      <Ionicons
+        name="mic-outline"
+        size={22}
+        color={disabled ? theme.textTertiary : theme.textSecondary}
+      />
+    </Pressable>
+  );
+
+  const sendControl = disabled ? (
+    <View
+      style={[
+        styles.sendButton,
+        styles.sendLoading,
+        compact && styles.sendButtonCompact,
+      ]}
+    >
+      <ActivityIndicator size="small" color={theme.textTertiary} />
+    </View>
+  ) : (
+    <Pressable
+      onPress={handleSend}
+      disabled={!canSend}
+      testID="send-btn"
+      style={({ pressed }) => [
+        styles.sendButton,
+        compact && styles.sendButtonCompact,
+        canSend ? styles.sendActive : { backgroundColor: theme.inputBackground },
+        pressed && canSend && styles.sendPressed,
+      ]}
+      hitSlop={8}
+    >
+      <Ionicons
+        name="arrow-up"
+        size={18}
+        color={canSend ? "#fff" : theme.textTertiary}
+      />
+    </Pressable>
+  );
 
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
@@ -45,6 +109,7 @@ export function ChatInput({
           compact && styles.inputWrapperCompact,
         ]}
       >
+        {compact ? micButton : null}
         <TextInput
           testID="chat-input-box"
           style={[
@@ -63,39 +128,20 @@ export function ChatInput({
           editable={!disabled}
           textAlignVertical={compact ? "center" : "top"}
         />
-        {disabled ? (
-          <View
-            style={[
-              styles.sendButton,
-              styles.sendLoading,
-              compact && styles.sendButtonCompact,
-            ]}
-          >
-            <ActivityIndicator size="small" color={theme.textTertiary} />
-          </View>
+        {compact ? (
+          sendControl
         ) : (
-          <Pressable
-            onPress={handleSend}
-            disabled={!canSend}
-            testID="send-btn"
-            style={({ pressed }) => [
-              styles.sendButton,
-              compact && styles.sendButtonCompact,
-              canSend
-                ? styles.sendActive
-                : { backgroundColor: theme.inputBackground },
-              pressed && canSend && styles.sendPressed,
-            ]}
-            hitSlop={8}
-          >
-            <Ionicons
-              name="arrow-up"
-              size={18}
-              color={canSend ? "#fff" : theme.textTertiary}
-            />
-          </Pressable>
+          <View style={styles.actionRow}>
+            {micButton}
+            {sendControl}
+          </View>
         )}
       </View>
+      <VoiceInputSheet
+        visible={voiceOpen}
+        onClose={() => setVoiceOpen(false)}
+        onInsert={handleVoiceInsert}
+      />
     </View>
   );
 }
@@ -123,8 +169,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 22,
     paddingVertical: 6,
-    paddingLeft: 16,
+    paddingLeft: 6,
     paddingRight: 6,
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  micButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micButtonCompact: {
+    marginRight: 2,
   },
   input: {
     fontSize: 17,
@@ -145,11 +207,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    alignSelf: "flex-end",
-    marginTop: 4,
   },
   sendButtonCompact: {
-    marginTop: 0,
     marginLeft: 6,
   },
   sendActive: {

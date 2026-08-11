@@ -29,6 +29,14 @@ export interface Dictionary {
     readonly routes: string;
     readonly locationDenied: string;
     readonly locationSettings: string;
+    readonly voiceTitle: string;
+    readonly voiceHint: string;
+    readonly voiceListening: string;
+    readonly voiceTapToResume: string;
+    readonly voiceDone: string;
+    readonly voiceCancel: string;
+    readonly voicePermission: string;
+    readonly voiceUnavailable: string;
   };
   settings: {
     readonly language: string;
@@ -42,6 +50,12 @@ export interface Dictionary {
   };
   map: {
     readonly title: string;
+  };
+  route: {
+    readonly stopCount: string;
+    readonly showAllStops: string;
+    readonly showLess: string;
+    readonly notFound: string;
   };
   tabs: {
     readonly transport: string;

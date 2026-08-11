@@ -7,7 +7,10 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { IconTool, IconMapPin } from "@tabler/icons-react";
 import { ArrivalCard } from "@/components/arrival-card";
+import { RouteCard } from "@/components/route-card";
 import type { DisplayArrivalsInput } from "@/lib/tools/display-arrivals";
+import type { DisplayRouteInput } from "@/lib/tools/display-route";
+import { pickVariant, type RouteInfoData } from "@/lib/route-query";
 
 export interface LocationPin {
   name: string;
@@ -21,6 +24,9 @@ interface ChatMessagesProps {
   onLocationClick?: (pin: LocationPin) => void;
   isLoading?: boolean;
   arrivalsData?: DisplayArrivalsInput | null;
+  fetchedRoutes?: Map<string, RouteInfoData>;
+  /** Bumped whenever fetchedRoutes is mutated in place, to retrigger the map effect. */
+  fetchedRoutesVersion?: number;
   lastRefreshedAt?: number | null;
   onRefresh?: () => void;
   isRefreshing?: boolean;
@@ -60,19 +66,25 @@ const ROUTE_COLORS = [
   "#ec4899",
 ];
 
-function extractMapData(messages: UIMessage[], arrivalsData?: DisplayArrivalsInput | null): MapData {
+function extractMapData(
+  messages: UIMessage[],
+  arrivalsData?: DisplayArrivalsInput | null,
+  fetchedRoutes?: Map<string, RouteInfoData>
+): MapData {
   const stops: MapStop[] = [];
   const routes: MapRoute[] = [];
   let colorIdx = 0;
 
-  // Find the last display_arrivals tool call ID
+  // Find the last display_arrivals / display_route tool call IDs
   let lastArrivalsId: string | null = null;
+  let lastRouteId: string | null = null;
   for (const msg of messages) {
     if (msg.role !== "assistant") continue;
     for (const part of msg.parts) {
       if (isToolUIPart(part)) {
         const tn = "toolName" in part ? String(part.toolName) : part.type.replace(/^tool-/, "");
         if (tn === "display_arrivals") lastArrivalsId = part.toolCallId;
+        if (tn === "display_route") lastRouteId = part.toolCallId;
       }
     }
   }
@@ -116,6 +128,35 @@ function extractMapData(messages: UIMessage[], arrivalsData?: DisplayArrivalsInp
             }
           }
         }
+        continue;
+      }
+
+      // display_route is a client-side tool: the stops live in fetchedRoutes,
+      // not in the tool part. Only the newest call draws, so an earlier route
+      // in the conversation doesn't clutter the map.
+      if (toolName === "display_route" && part.input) {
+        if (part.toolCallId !== lastRouteId) continue;
+        const routeData = fetchedRoutes?.get(part.toolCallId);
+        if (!routeData) continue;
+        const variant = pickVariant(
+          routeData,
+          (part.input as DisplayRouteInput).bound
+        );
+        if (!variant || variant.stops.length === 0) continue;
+
+        const routeStops: MapStop[] = variant.stops.map((s) => ({
+          id: s.id,
+          name: s.name,
+          lat: s.lat,
+          lng: s.lng,
+        }));
+        stops.push(...routeStops);
+        routes.push({
+          name: `${variant.route} → ${variant.destination}`,
+          color: ROUTE_COLORS[colorIdx % ROUTE_COLORS.length],
+          stops: routeStops,
+        });
+        colorIdx++;
         continue;
       }
 
@@ -340,6 +381,8 @@ export function ChatMessages({
   onLocationClick,
   isLoading,
   arrivalsData,
+  fetchedRoutes,
+  fetchedRoutesVersion,
   lastRefreshedAt,
   onRefresh,
   isRefreshing,
@@ -355,15 +398,19 @@ export function ChatMessages({
   }, [messages]);
 
   useEffect(() => {
-    const data = extractMapData(messages, arrivalsData);
+    const data = extractMapData(messages, arrivalsData, fetchedRoutes);
     onMapData?.(data);
-  }, [messages, arrivalsData, onMapData]);
+    // fetchedRoutes is a stable ref mutated in place — fetchedRoutesVersion is
+    // what actually signals new data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, arrivalsData, fetchedRoutes, fetchedRoutesVersion, onMapData]);
 
   if (messages.length === 0) return null;
 
   // Build dedup maps
   const latestToolState = new Map<string, string>();
   let lastArrivalsToolCallId: string | null = null;
+  let lastRouteToolCallId: string | null = null;
   for (const msg of messages) {
     for (const part of msg.parts) {
       if (isToolUIPart(part)) {
@@ -371,6 +418,9 @@ export function ChatMessages({
         const tn = "toolName" in part ? String(part.toolName) : part.type.replace(/^tool-/, "");
         if (tn === "display_arrivals") {
           lastArrivalsToolCallId = part.toolCallId;
+        }
+        if (tn === "display_route") {
+          lastRouteToolCallId = part.toolCallId;
         }
       }
     }
@@ -476,6 +526,23 @@ export function ChatMessages({
                         lastRefreshedAt={isLatest ? lastRefreshedAt : undefined}
                         onRefresh={isLatest ? onRefresh : undefined}
                         isRefreshing={isLatest ? isRefreshing : undefined}
+                      />
+                    </div>
+                  );
+                }
+
+                // Render RouteCard for display_route tool
+                if (toolName === "display_route" && part.input) {
+                  return (
+                    <div key={part.toolCallId} className="py-1">
+                      <RouteCard
+                        input={part.input as DisplayRouteInput}
+                        data={fetchedRoutes?.get(part.toolCallId)}
+                        onLocationClick={onLocationClick}
+                        stale={
+                          lastRouteToolCallId !== null &&
+                          part.toolCallId !== lastRouteToolCallId
+                        }
                       />
                     </div>
                   );

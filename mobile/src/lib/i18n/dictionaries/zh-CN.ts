@@ -21,9 +21,23 @@ export default {
     routes: "路线",
     locationDenied: "位置服务已关闭",
     locationSettings: "打开设置",
+    voiceTitle: "语音输入",
+    voiceHint: "请开始说话，内容会显示在这里，并只保留在你的设备上。",
+    voiceListening: "聆听中…",
+    voiceTapToResume: "点按麦克风继续说话",
+    voiceDone: "完成",
+    voiceCancel: "取消",
+    voicePermission: "麦克风或语音识别权限已关闭",
+    voiceUnavailable: "此设备不支持语音识别",
   },
   map: {
     title: "地图",
+  },
+  route: {
+    stopCount: "{0} 个站",
+    showAllStops: "显示全部 {0} 个站",
+    showLess: "收起",
+    notFound: "找不到 {0} 的路线信息",
   },
   settings: {
     language: "语言",

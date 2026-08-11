@@ -288,7 +288,7 @@ func Register(s *server.MCPServer, nearby *service.NearbyArrivalsService, route 
 	// search_route
 	s.AddTool(
 		mcp.NewTool("search_route",
-			mcp.WithDescription("Search for a bus route by number and get its stops and details. Returns route information including origin, destination, operator, and ordered stop list."),
+			mcp.WithDescription("Search for a bus route by number and get its stops and details. Use this when the user asks about a route itself (e.g. 'A11 route', 'where does the 968 go?') rather than about arrival times. Returns one entry per direction, each with origin, destination, operator, and the ordered stop list."),
 			mcp.WithString("route_number",
 				mcp.Required(),
 				mcp.Description("Bus route number (e.g., '1A', '960', 'N969')"),

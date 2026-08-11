@@ -21,9 +21,23 @@ export default {
     routes: "路線",
     locationDenied: "位置服務已關閉",
     locationSettings: "開啟設定",
+    voiceTitle: "語音輸入",
+    voiceHint: "請開始說話，內容會在此顯示，並只保留在你的裝置上。",
+    voiceListening: "聆聽中⋯",
+    voiceTapToResume: "點按麥克風繼續說話",
+    voiceDone: "完成",
+    voiceCancel: "取消",
+    voicePermission: "麥克風或語音辨識權限已關閉",
+    voiceUnavailable: "此裝置不支援語音辨識",
   },
   map: {
     title: "地圖",
+  },
+  route: {
+    stopCount: "{0} 個站",
+    showAllStops: "顯示全部 {0} 個站",
+    showLess: "收合",
+    notFound: "找不到 {0} 的路線資料",
   },
   settings: {
     language: "語言",
