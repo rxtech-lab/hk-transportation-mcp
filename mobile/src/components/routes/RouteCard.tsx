@@ -116,9 +116,15 @@ export function RouteCard({
     return (
       <View style={[styles.card, { backgroundColor: theme.cardBackground }]}>
         <View style={styles.loadingRow}>
-          <Ionicons name="bus-outline" size={16} color={theme.textSecondary} />
+          <Ionicons
+            name={data.error ? "cloud-offline-outline" : "bus-outline"}
+            size={16}
+            color={theme.textSecondary}
+          />
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-            {dict.route.notFound.replace("{0}", input.route)}
+            {data.error
+              ? dict.route.loadFailed.replace("{0}", input.route)
+              : dict.route.notFound.replace("{0}", input.route)}
           </Text>
         </View>
       </View>

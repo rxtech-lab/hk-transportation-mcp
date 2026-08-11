@@ -62,6 +62,8 @@ export interface RouteVariant {
 export interface RouteInfoData {
   route: string;
   routes: RouteVariant[];
+  /** Set when the lookup failed, so the card can show an error instead of spinning. */
+  error?: string;
 }
 
 export interface StopData {

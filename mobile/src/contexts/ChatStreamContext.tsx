@@ -10,6 +10,7 @@ import {
 import { useChat, type UseChatHelpers } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
+  isToolUIPart,
   lastAssistantMessageIsCompleteWithToolCalls,
   type UIMessage,
 } from "ai";
@@ -19,7 +20,7 @@ import * as Haptics from "expo-haptics";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { FRONTEND_URL } from "@/lib/config";
 import { resolveArrivalsURL } from "@/lib/arrivals-query";
-import { fetchRouteInfo, summarizeRouteInfo } from "@/lib/route-query";
+import { getRouteInfo, summarizeRouteInfo } from "@/lib/route-query";
 import { updateWidget } from "@/lib/widget";
 import { startTracking } from "@/lib/live-activity";
 import type {
@@ -166,13 +167,15 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
       }
       if (toolCall.toolName === "display_route") {
         const input = toolCall.input as DisplayRouteInput;
+        // Only the model-facing summary is produced here — the card's own data
+        // is filled in by the sweep below, which also covers restored sessions
+        // where onToolCall never fires. Both share one request via getRouteInfo.
+        //
         // Unlike arrivals, the model needs the outcome: whether the route
         // exists at all, and which directions it runs. The lookup is a single
         // indexed query, so waiting for it barely delays the stream.
-        fetchRouteInfo(input)
+        getRouteInfo(input)
           .then((data) => {
-            fetchedRoutes.current.set(toolCall.toolCallId, data);
-            setFetchedRoutesVersion((v) => v + 1);
             addToolOutput({
               tool: "display_route" as never,
               toolCallId: toolCall.toolCallId,
@@ -181,7 +184,7 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           })
           .catch((err) => {
-            console.error("[fetchRouteInfo] failed:", err, "input:", input);
+            console.error("[getRouteInfo] failed:", err, "input:", input);
             addToolOutput({
               tool: "display_route" as never,
               toolCallId: toolCall.toolCallId,
@@ -237,6 +240,51 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
       }
     },
   });
+
+  // Backfill route data for any display_route call we don't have yet.
+  //
+  // onToolCall only fires while a stream is live, so a session restored from
+  // storage would otherwise leave every route card spinning forever. Sweeping
+  // the messages covers both cases; getRouteInfo dedupes against the in-flight
+  // request the live path already started.
+  const routeFetchesStarted = useRef(new Set<string>());
+  useEffect(() => {
+    for (const msg of messages) {
+      if (msg.role !== "assistant") continue;
+      for (const part of msg.parts) {
+        if (!isToolUIPart(part)) continue;
+        const toolName =
+          "toolName" in part
+            ? String(part.toolName)
+            : part.type.replace(/^tool-/, "");
+        if (toolName !== "display_route") continue;
+
+        const input = part.input as DisplayRouteInput | undefined;
+        // The input streams in incrementally; wait until the route is present.
+        if (!input?.route) continue;
+        if (routeFetchesStarted.current.has(part.toolCallId)) continue;
+        routeFetchesStarted.current.add(part.toolCallId);
+
+        const toolCallId = part.toolCallId;
+        getRouteInfo(input)
+          .then((data) => {
+            fetchedRoutes.current.set(toolCallId, data);
+          })
+          .catch((err) => {
+            console.error("[getRouteInfo] backfill failed:", err, input);
+            // Record the failure so the card shows an error rather than an
+            // endless spinner, and allow a retry on the next mount.
+            fetchedRoutes.current.set(toolCallId, {
+              route: input.route,
+              routes: [],
+              error: err instanceof Error ? err.message : String(err),
+            });
+            routeFetchesStarted.current.delete(toolCallId);
+          })
+          .finally(() => setFetchedRoutesVersion((v) => v + 1));
+      }
+    }
+  }, [messages]);
 
   // Apply pending messages after useChat settles with the new id.
   // Skip the initial mount — on first render, child effects (ChatScreen restore)

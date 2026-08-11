@@ -38,6 +38,7 @@ export default {
     showAllStops: "Show all {0} stops",
     showLess: "Show less",
     notFound: "No route information found for {0}",
+    loadFailed: "Couldn't load route {0}. Pull to refresh or ask again.",
   },
   settings: {
     language: "Language",

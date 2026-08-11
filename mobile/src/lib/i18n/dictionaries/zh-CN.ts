@@ -38,6 +38,7 @@ export default {
     showAllStops: "显示全部 {0} 个站",
     showLess: "收起",
     notFound: "找不到 {0} 的路线信息",
+    loadFailed: "无法加载 {0} 路线，请刷新或再问一次。",
   },
   settings: {
     language: "语言",

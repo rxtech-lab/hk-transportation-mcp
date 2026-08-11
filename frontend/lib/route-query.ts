@@ -37,6 +37,8 @@ export interface RouteVariant {
 export interface RouteInfoData {
   route: string;
   routes: RouteVariant[];
+  /** Set when the lookup failed, so the card can show an error instead of spinning. */
+  error?: string;
 }
 
 /**
@@ -61,6 +63,37 @@ export async function fetchRouteInfo(
   }
   const data = await res.json();
   return { route: data.route ?? input.route, routes: data.routes ?? [] };
+}
+
+function queryKey(input: DisplayRouteInput): string {
+  return `${input.route}|${input.operator ?? ""}|${input.bound ?? ""}`;
+}
+
+const inFlight = new Map<string, Promise<RouteInfoData>>();
+
+/**
+ * fetchRouteInfo deduplicated by query.
+ *
+ * Two paths need the same data and can race: onToolCall (to tell the model what
+ * the card ended up showing) and the message sweep that backfills restored
+ * sessions. Sharing one promise per query keeps that to a single request, and
+ * makes a route the user asks about twice free the second time.
+ *
+ * Failures are evicted so a later render can retry.
+ */
+export function getRouteInfo(
+  input: DisplayRouteInput,
+): Promise<RouteInfoData> {
+  const key = queryKey(input);
+  const hit = inFlight.get(key);
+  if (hit) return hit;
+
+  const pending = fetchRouteInfo(input).catch((err) => {
+    inFlight.delete(key);
+    throw err;
+  });
+  inFlight.set(key, pending);
+  return pending;
 }
 
 /**
