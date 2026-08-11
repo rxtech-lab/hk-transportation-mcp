@@ -19,9 +19,14 @@ import * as Haptics from "expo-haptics";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { FRONTEND_URL } from "@/lib/config";
 import { resolveArrivalsURL } from "@/lib/arrivals-query";
+import { fetchRouteInfo, summarizeRouteInfo } from "@/lib/route-query";
 import { updateWidget } from "@/lib/widget";
 import { startTracking } from "@/lib/live-activity";
-import type { DisplayArrivalsInput } from "@/lib/types";
+import type {
+  DisplayArrivalsInput,
+  DisplayRouteInput,
+  RouteInfoData,
+} from "@/lib/types";
 
 async function fetchArrivals(url: string): Promise<DisplayArrivalsInput> {
   const res = await fetch(url);
@@ -48,6 +53,8 @@ type ChatStreamContextValue = {
   geo: ReturnType<typeof useGeolocation>;
   fetchedArrivals: React.RefObject<Map<string, DisplayArrivalsInput>>;
   fetchedArrivalsVersion: number;
+  fetchedRoutes: React.RefObject<Map<string, RouteInfoData>>;
+  fetchedRoutesVersion: number;
 };
 
 export const ChatStreamContext = createContext<ChatStreamContextValue>({
@@ -71,6 +78,8 @@ export const ChatStreamContext = createContext<ChatStreamContextValue>({
   },
   fetchedArrivals: { current: new Map() },
   fetchedArrivalsVersion: 0,
+  fetchedRoutes: { current: new Map() },
+  fetchedRoutesVersion: 0,
 });
 
 export function ChatStreamProvider({ children }: { children: ReactNode }) {
@@ -84,6 +93,8 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
   geoRef.current = geo;
   const fetchedArrivals = useRef(new Map<string, DisplayArrivalsInput>());
   const [fetchedArrivalsVersion, setFetchedArrivalsVersion] = useState(0);
+  const fetchedRoutes = useRef(new Map<string, RouteInfoData>());
+  const [fetchedRoutesVersion, setFetchedRoutesVersion] = useState(0);
 
   const chatHookId = currentChatId
     ? `session-${currentChatId}`
@@ -152,6 +163,33 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
           // Legacy flow: stops data passed directly
           updateWidget(input);
         }
+      }
+      if (toolCall.toolName === "display_route") {
+        const input = toolCall.input as DisplayRouteInput;
+        // Unlike arrivals, the model needs the outcome: whether the route
+        // exists at all, and which directions it runs. The lookup is a single
+        // indexed query, so waiting for it barely delays the stream.
+        fetchRouteInfo(input)
+          .then((data) => {
+            fetchedRoutes.current.set(toolCall.toolCallId, data);
+            setFetchedRoutesVersion((v) => v + 1);
+            addToolOutput({
+              tool: "display_route" as never,
+              toolCallId: toolCall.toolCallId,
+              output: summarizeRouteInfo(data),
+            });
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          })
+          .catch((err) => {
+            console.error("[fetchRouteInfo] failed:", err, "input:", input);
+            addToolOutput({
+              tool: "display_route" as never,
+              toolCallId: toolCall.toolCallId,
+              output: `Failed to load route ${input.route}: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            });
+          });
       }
       if (toolCall.toolName === "show_live_activity") {
         const input = toolCall.input as {
@@ -250,6 +288,8 @@ export function ChatStreamProvider({ children }: { children: ReactNode }) {
         geo,
         fetchedArrivals,
         fetchedArrivalsVersion,
+        fetchedRoutes,
+        fetchedRoutesVersion,
       }}
     >
       {children}

@@ -1,17 +1,44 @@
 import { useMemo } from "react";
 import { isToolUIPart, type UIMessage } from "ai";
-import type { DisplayArrivalsInput, MapData, MapStop, StopData } from "@/lib/types";
+import type {
+  DisplayArrivalsInput,
+  DisplayRouteInput,
+  MapData,
+  MapStop,
+  RouteInfoData,
+  RouteVariant,
+  StopData,
+} from "@/lib/types";
 import { ROUTE_COLORS } from "@/constants/map";
+
+/**
+ * Picks the variant the card is showing: the one matching the requested bound,
+ * else the first one the backend returned.
+ */
+function pickVariant(
+  data: RouteInfoData,
+  bound?: string
+): RouteVariant | undefined {
+  if (bound) {
+    const match = data.routes.find(
+      (r) => r.bound.toUpperCase() === bound.toUpperCase()
+    );
+    if (match) return match;
+  }
+  return data.routes[0];
+}
 
 export function extractMapData(
   messages: UIMessage[],
-  arrivalsData?: DisplayArrivalsInput | null
+  arrivalsData?: DisplayArrivalsInput | null,
+  fetchedRoutes?: Map<string, RouteInfoData>
 ): MapData {
   const stops: MapStop[] = [];
   const routes: MapData["routes"] = [];
   let colorIdx = 0;
 
   let lastArrivalsId: string | null = null;
+  let lastRouteId: string | null = null;
   for (const msg of messages) {
     if (msg.role !== "assistant") continue;
     for (const part of msg.parts) {
@@ -21,6 +48,7 @@ export function extractMapData(
             ? String(part.toolName)
             : part.type.replace(/^tool-/, "");
         if (tn === "display_arrivals") lastArrivalsId = part.toolCallId;
+        if (tn === "display_route") lastRouteId = part.toolCallId;
       }
     }
   }
@@ -67,6 +95,36 @@ export function extractMapData(
             }
           }
         }
+        continue;
+      }
+
+      // display_route is a client-side tool: the stops live in fetchedRoutes,
+      // not in the tool part. Only the newest call draws, so an earlier route
+      // in the conversation doesn't clutter the map.
+      if (toolName === "display_route" && part.input) {
+        if (part.toolCallId !== lastRouteId) continue;
+        const data = fetchedRoutes?.get(part.toolCallId);
+        if (!data) continue;
+        const input = part.input as DisplayRouteInput;
+        const variant = pickVariant(data, input.bound);
+        if (!variant || variant.stops.length === 0) continue;
+
+        const routeStops: MapStop[] = variant.stops.map((s) => ({
+          id: s.id,
+          name: s.name,
+          name_en: s.name_en,
+          name_tc: s.name_tc,
+          name_sc: s.name_sc,
+          lat: s.lat,
+          lng: s.lng,
+        }));
+        stops.push(...routeStops);
+        routes.push({
+          name: `${variant.route} → ${variant.destination}`,
+          color: ROUTE_COLORS[colorIdx % ROUTE_COLORS.length],
+          stops: routeStops,
+        });
+        colorIdx++;
         continue;
       }
 
@@ -151,10 +209,14 @@ export function extractMapData(
 
 export function useMapData(
   messages: UIMessage[],
-  arrivalsData?: DisplayArrivalsInput | null
+  arrivalsData?: DisplayArrivalsInput | null,
+  fetchedRoutes?: Map<string, RouteInfoData>,
+  /** Bumped whenever fetchedRoutes is mutated in place, to retrigger the memo. */
+  fetchedRoutesVersion?: number
 ): MapData {
   return useMemo(
-    () => extractMapData(messages, arrivalsData),
-    [messages, arrivalsData]
+    () => extractMapData(messages, arrivalsData, fetchedRoutes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [messages, arrivalsData, fetchedRoutes, fetchedRoutesVersion]
   );
 }

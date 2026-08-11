@@ -51,6 +51,12 @@ export interface Dictionary {
   map: {
     readonly title: string;
   };
+  route: {
+    readonly stopCount: string;
+    readonly showAllStops: string;
+    readonly showLess: string;
+    readonly notFound: string;
+  };
   tabs: {
     readonly transport: string;
     readonly nearby: string;

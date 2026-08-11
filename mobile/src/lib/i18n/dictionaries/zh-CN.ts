@@ -33,6 +33,12 @@ export default {
   map: {
     title: "地图",
   },
+  route: {
+    stopCount: "{0} 个站",
+    showAllStops: "显示全部 {0} 个站",
+    showLess: "收起",
+    notFound: "找不到 {0} 的路线信息",
+  },
   settings: {
     language: "语言",
     location: "位置服务",

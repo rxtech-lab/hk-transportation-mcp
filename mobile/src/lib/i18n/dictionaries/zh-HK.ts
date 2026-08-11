@@ -33,6 +33,12 @@ export default {
   map: {
     title: "地圖",
   },
+  route: {
+    stopCount: "{0} 個站",
+    showAllStops: "顯示全部 {0} 個站",
+    showLess: "收起",
+    notFound: "找不到 {0} 的路線資料",
+  },
   settings: {
     language: "語言",
     location: "位置服務",

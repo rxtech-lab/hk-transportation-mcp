@@ -3,7 +3,13 @@ import { isToolUIPart, type UIMessage } from "ai";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ToolCallBadge } from "./ToolCallBadge";
 import { ArrivalCard } from "@/components/arrivals/ArrivalCard";
-import type { DisplayArrivalsInput, LocationPin } from "@/lib/types";
+import { RouteCard } from "@/components/routes/RouteCard";
+import type {
+  DisplayArrivalsInput,
+  DisplayRouteInput,
+  LocationPin,
+  RouteInfoData,
+} from "@/lib/types";
 
 export interface ToolCallInfo {
   toolName: string;
@@ -18,6 +24,8 @@ interface AssistantMessageProps {
   lastArrivalsToolCallId: string | null;
   arrivalsData?: DisplayArrivalsInput | null;
   fetchedArrivals?: Map<string, DisplayArrivalsInput>;
+  lastRouteToolCallId?: string | null;
+  fetchedRoutes?: Map<string, RouteInfoData>;
   onLocationClick?: (pin: LocationPin) => void;
   lastRefreshedAt?: number | null;
   onRefresh?: () => void;
@@ -32,6 +40,8 @@ export function AssistantMessage({
   lastArrivalsToolCallId,
   arrivalsData,
   fetchedArrivals,
+  lastRouteToolCallId,
+  fetchedRoutes,
   onLocationClick,
   lastRefreshedAt,
   onRefresh,
@@ -89,6 +99,23 @@ export function AssistantMessage({
                     onArrivalsExpand
                       ? () => onArrivalsExpand(cardData)
                       : undefined
+                  }
+                />
+              </View>
+            );
+          }
+
+          if (toolName === "display_route" && part.input) {
+            const input = part.input as DisplayRouteInput;
+            return (
+              <View key={part.toolCallId} style={styles.toolRow}>
+                <RouteCard
+                  input={input}
+                  data={fetchedRoutes?.get(part.toolCallId)}
+                  onLocationClick={onLocationClick}
+                  stale={
+                    lastRouteToolCallId != null &&
+                    part.toolCallId !== lastRouteToolCallId
                   }
                 />
               </View>

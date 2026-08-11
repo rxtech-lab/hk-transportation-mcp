@@ -19,6 +19,51 @@ export interface DisplayArrivalsInput {
   stops?: StopData[];
 }
 
+/** Input the model passes to the client-side `display_route` tool. */
+export interface DisplayRouteInput {
+  route: string;
+  operator?: "KMB" | "CTB" | "GMB";
+  bound?: string;
+}
+
+export interface RouteStopPoint {
+  id: string;
+  name: string;
+  name_en: string;
+  name_tc: string;
+  name_sc: string;
+  lat: number;
+  lng: number;
+  seq: number;
+}
+
+/** One direction/service-type variant of a route, as returned by /api/route-info. */
+export interface RouteVariant {
+  route_id: string;
+  route: string;
+  bound: string;
+  service_type: string;
+  operator: string;
+  /** First stop of this variant's ordered stop list. */
+  origin: string;
+  origin_tc?: string;
+  origin_sc?: string;
+  /** Last stop of this variant's ordered stop list. */
+  destination: string;
+  destination_tc?: string;
+  destination_sc?: string;
+  /** The operator's published labels — may describe the opposite direction. */
+  published_origin?: string;
+  published_destination?: string;
+  stop_count: number;
+  stops: RouteStopPoint[];
+}
+
+export interface RouteInfoData {
+  route: string;
+  routes: RouteVariant[];
+}
+
 export interface StopData {
   id: string;
   name: string;

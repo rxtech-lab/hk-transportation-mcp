@@ -5,6 +5,12 @@ import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls, isToolUIPart } from "ai";
 import { AnimatePresence, motion } from "framer-motion";
 import type { DisplayArrivalsInput } from "@/lib/tools/display-arrivals";
+import type { DisplayRouteInput } from "@/lib/tools/display-route";
+import {
+  fetchRouteInfo,
+  summarizeRouteInfo,
+  type RouteInfoData,
+} from "@/lib/route-query";
 import { IconBus, IconMap, IconPlus } from "@tabler/icons-react";
 import { ChatInput } from "@/components/chat-input";
 import { ChatMessages, type MapData, type LocationPin } from "@/components/chat-messages";
@@ -38,6 +44,8 @@ export default function Home() {
   const geo = useGeolocation();
   const { dict, locale } = useI18n();
   const geoRequestedRef = useRef(false);
+  const fetchedRoutes = useRef(new Map<string, RouteInfoData>());
+  const [fetchedRoutesVersion, setFetchedRoutesVersion] = useState(0);
 
   const { messages, sendMessage, status, setMessages, error, addToolOutput } =
     useChat({
@@ -73,6 +81,31 @@ export default function Home() {
             toolCallId: toolCall.toolCallId,
             output: "Arrival card displayed to user.",
           });
+        }
+        if (toolCall.toolName === "display_route") {
+          const input = (toolCall as { input: unknown }).input as DisplayRouteInput;
+          // Unlike arrivals, the model needs the outcome: whether the route
+          // exists at all, and which directions it runs.
+          fetchRouteInfo(input)
+            .then((data) => {
+              fetchedRoutes.current.set(toolCall.toolCallId, data);
+              setFetchedRoutesVersion((v) => v + 1);
+              addToolOutput({
+                tool: "display_route" as never,
+                toolCallId: toolCall.toolCallId,
+                output: summarizeRouteInfo(data),
+              });
+            })
+            .catch((err) => {
+              console.error("[fetchRouteInfo] failed:", err, "input:", input);
+              addToolOutput({
+                tool: "display_route" as never,
+                toolCallId: toolCall.toolCallId,
+                output: `Failed to load route ${input.route}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              });
+            });
         }
         if (toolCall.toolName === "get_user_location") {
           geo.request().then((coords) => {
@@ -158,6 +191,8 @@ export default function Home() {
     setMessages([]);
     setMapData({ stops: [], routes: [] });
     setArrivalsOverride(null);
+    fetchedRoutes.current.clear();
+    setFetchedRoutesVersion((v) => v + 1);
     clearChatStorage();
     setIsLanding(true);
     setShowMobileMap(false);
@@ -393,6 +428,8 @@ export default function Home() {
                 onLocationClick={handleLocationClick}
                 isLoading={isLoading}
                 arrivalsData={arrivalsData}
+                fetchedRoutes={fetchedRoutes.current}
+                fetchedRoutesVersion={fetchedRoutesVersion}
                 lastRefreshedAt={lastRefreshedAt}
                 onRefresh={refetchArrivals}
                 isRefreshing={isRefreshing}

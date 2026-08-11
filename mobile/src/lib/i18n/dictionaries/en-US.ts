@@ -33,6 +33,12 @@ export default {
   map: {
     title: "Map",
   },
+  route: {
+    stopCount: "{0} stops",
+    showAllStops: "Show all {0} stops",
+    showLess: "Show less",
+    notFound: "No route information found for {0}",
+  },
   settings: {
     language: "Language",
     location: "Location",
