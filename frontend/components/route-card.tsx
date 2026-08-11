@@ -60,7 +60,9 @@ export function RouteCard({
     return (
       <div className="flex items-center gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-[13px] text-zinc-400">
         <IconBus size={15} />
-        No route information found for {input.route}
+        {data.error
+          ? `Couldn't load route ${input.route}. Reload or ask again.`
+          : `No route information found for ${input.route}`}
       </div>
     );
   }

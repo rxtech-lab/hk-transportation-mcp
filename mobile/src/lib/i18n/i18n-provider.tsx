@@ -56,6 +56,7 @@ export interface Dictionary {
     readonly showAllStops: string;
     readonly showLess: string;
     readonly notFound: string;
+    readonly loadFailed: string;
   };
   tabs: {
     readonly transport: string;
