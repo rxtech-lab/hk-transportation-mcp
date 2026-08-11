@@ -18,6 +18,7 @@
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We use your location to find nearby bus stops and show real-time arrivals.",
+        "NSPhotoLibraryUsageDescription": "HKTransportAgent does not read or upload your photos. This permission is only declared because an image component we use can display images stored on your device.",
         "ITSAppUsesNonExemptEncryption": false,
         "NSSupportsLiveActivities": true
       }
